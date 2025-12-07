@@ -1,0 +1,290 @@
+# Automaker Development Progress
+
+## Session 1 - Initial Setup (December 7, 2024)
+
+### Accomplishments
+1. **Created Next.js + Electron project structure**
+   - Set up Next.js with TypeScript, Tailwind CSS, and App Router
+   - Configured Electron main process with IPC bridge
+   - Created preload script for secure context isolation
+
+2. **Implemented Core UI Components**
+   - Sidebar with collapsible functionality
+   - Welcome view with project creation/opening
+   - Kanban Board view with drag-and-drop (dnd-kit)
+   - Spec Editor view for app_spec.txt
+   - Code Explorer view with file tree
+   - Agent Chat view (mock implementation)
+
+3. **Set up State Management**
+   - Zustand store with persist middleware
+   - Theme management (dark/light mode)
+   - Project and feature state management
+
+4. **Configured Testing Infrastructure**
+   - Playwright test framework
+   - 17 passing tests for foundation features
+   - Tests cover: app loading, sidebar, theme toggle, project dialogs, kanban board
+
+5. **Implemented Mock IPC for Web Development**
+   - Mock Electron API for browser-based development
+   - "Web Mode" indicator shows when running in browser
+
+### Features Marked as Passing (6/25)
+1. Initialize the Electron application shell
+2. Render Kanban columns
+3. Add new feature card
+4. Implement Dark Mode
+5. Responsive Sidebar
+6. Mock Electron for Web Dev
+
+### Next Steps (Priority Order)
+1. Complete "Create New Project" workflow - need to verify file creation works
+2. Complete "Open Existing Project" workflow - need to test with real Electron
+3. Implement "Load cards from feature_list.json" - connect to file system
+4. Implement drag-and-drop persistence to feature_list.json
+5. Add Settings page for API key management
+6. Integrate AI SDKs (Claude, Gemini) for agent functionality
+
+### Technical Notes
+- Project runs on port 3000
+- Use `npm run dev:web` for browser-based development
+- Use `npm run dev:electron` for full Electron mode
+- All tests use Playwright with 10s timeout
+
+### Current Status
+- 6/25 features passing (24%)
+- 17/17 Playwright tests passing
+- No critical bugs or console errors
+- Git commit: feat: Initialize Automaker - Autonomous AI Development Studio
+
+---
+
+## Session 2 - Project Management & Kanban Features (December 7, 2024)
+
+### Accomplishments
+1. **Completed "Create New Project" workflow**
+   - Full end-to-end workflow with dialog, name/path inputs
+   - Creates project folder with app_spec.txt and feature_list.json
+   - Navigates to board view after creation
+   - Project appears in recent projects list
+
+2. **Verified "Project List Persistence"**
+   - Projects persist across page reloads
+   - Recent projects section shows after creating projects
+
+3. **Implemented "Load cards from feature_list.json"**
+   - Cards load from mock feature_list.json
+   - Cards appear in correct columns based on passes status
+   - Features with passes:false go to Backlog
+   - Features with passes:true go to Verified
+
+4. **Completed "Edit card details" feature**
+   - Click edit button on any card to open edit dialog
+   - Edit category, description, and steps
+   - Changes persist in feature_list.json
+   - Dialog pre-populates with existing data
+
+### Features Marked as Passing This Session
+1. Create 'New Project' workflow
+2. Project List Persistence
+3. Load cards from feature_list.json
+4. Edit card details
+
+### Playwright Tests Added
+- create button enables when name and path are entered
+- creates project and navigates to board view
+- created project appears in recent projects on welcome view
+- loads cards from feature_list.json and displays them in correct columns
+- features with passes:true appear in verified column
+- can edit feature card details
+- edit dialog shows existing feature data
+
+### Next Steps (Priority Order)
+1. Implement drag-and-drop persistence (update feature_list.json on drag)
+2. Implement "Open Existing Project" workflow
+3. Add Settings page for API key management
+4. Integrate AI SDKs (Claude, Gemini) for agent functionality
+
+### Technical Notes
+- All 24 Playwright tests passing
+- Mock IPC correctly handles file read/write operations
+- Edit feature uses dynamic testid pattern for reliable selection
+
+### Current Status
+- 10/25 features passing (40%)
+- 24/24 Playwright tests passing
+- No critical bugs or console errors
+
+---
+
+### Session 2 Continued - Open Existing Project (December 7, 2024)
+
+### Additional Accomplishments
+5. **Completed "Open Existing Project" workflow**
+   - Click Open Project card to trigger directory selection
+   - Mock prompt dialog for testing in web mode
+   - Project loads into dashboard with Kanban board
+   - Features load from mock feature_list.json
+   - Recent project cards can be clicked to reopen projects
+
+### Additional Features Marked as Passing
+5. Open 'Existing Project' workflow
+
+### Additional Playwright Tests Added
+- opens existing project and navigates to board view
+- opened project loads into dashboard with features
+- can click on recent project to reopen it
+
+### Next Steps (Priority Order)
+1. Implement drag-and-drop persistence (update feature_list.json on drag)
+2. Add Settings page for API key management
+3. Integrate AI SDKs (Claude, Gemini) for agent functionality
+
+### Updated Current Status
+- 11/25 features passing (44%)
+- 27/27 Playwright tests passing
+- No critical bugs or console errors
+
+---
+
+### Session 2 Final - Settings Page (December 7, 2024)
+
+### Final Accomplishments
+6. **Implemented "Manage API Keys" Settings page**
+   - Full Settings view accessible from sidebar
+   - Anthropic API key input with visibility toggle
+   - Google API key input with visibility toggle
+   - Keys persist to localStorage
+   - Security notice about local storage
+   - Save confirmation feedback
+   - Navigation back to home
+
+### Final Features Marked as Passing
+6. Manage API Keys
+
+### Final Playwright Tests Added (8 new tests)
+- can navigate to settings page
+- shows Anthropic and Google API key inputs
+- can enter and save Anthropic API key
+- can enter and save Google API key
+- API key inputs are password type by default
+- can toggle API key visibility
+- can navigate back to home from settings
+- shows security notice about local storage
+
+### Next Steps (Priority Order)
+1. Implement drag-and-drop persistence (update feature_list.json on drag)
+2. Integrate AI SDKs (Claude, Gemini) for agent functionality
+3. Implement Interactive New Project Interview (AI-powered)
+
+### Final Session Status
+- 12/25 features passing (48%)
+- 35/35 Playwright tests passing
+- No critical bugs or console errors
+- All new features have comprehensive test coverage
+
+---
+
+## Session 3 - Drag and Drop Implementation (December 7, 2024)
+
+### Accomplishments
+1. **Completed "Drag and drop cards" feature**
+   - Verified drag-and-drop was already implemented with dnd-kit
+   - Added data-testid to drag handles for reliable test selection
+   - Added touch-none CSS class to drag handles to prevent text selection
+   - Feature uses PointerSensor with 8px activation distance
+   - moveFeature action updates status in Zustand store
+   - saveFeatures effect writes updated feature_list.json to disk
+
+2. **Added Playwright tests for drag and drop**
+   - Test: "can drag card from Backlog to In Progress column"
+   - Test: "drag and drop updates feature status and triggers file save"
+   - Tests use mouse events for reliable dnd-kit interaction
+   - Tests verify card moves between columns visually
+
+3. **Fixed port conflict issues**
+   - Updated playwright.config.ts to use port 3002
+   - Resolved lock file conflicts between Next.js instances
+
+### Feature Marked as Passing This Session
+1. Drag and drop cards
+
+### Playwright Tests Added (2 new tests)
+- can drag card from Backlog to In Progress column
+- drag and drop updates feature status and triggers file save
+
+### Technical Notes
+- Drag-and-drop uses dnd-kit with closestCorners collision detection
+- KanbanCard uses useSortable hook
+- KanbanColumn uses useDroppable hook
+- handleDragEnd in BoardView calls moveFeature and triggers auto-save
+- Tests use page.mouse.move with steps: 20 to properly trigger dnd-kit
+
+### Next Steps (Priority Order)
+1. Integrate AI SDKs (Claude, Gemini) for agent functionality
+2. Implement Interactive New Project Interview (AI-powered)
+3. Implement agent file system tools (read, write, terminal)
+
+### Current Status
+- 13/25 features passing (52%)
+- 37/37 Playwright tests passing
+- No critical bugs or console errors
+- Kanban board fully functional with drag-and-drop persistence
+
+---
+
+## Session 4 - Project Analysis Feature (December 7, 2024)
+
+### Accomplishments
+1. **Implemented "Analyze codebase file structure" feature**
+   - Created new Analysis view accessible from sidebar navigation
+   - Added "analysis" view type to the app store
+   - Implemented recursive directory scanning with depth limit
+   - File tree parsed correctly into memory with counts
+   - Shows statistics: total files, total directories, files by extension
+   - Interactive expandable file tree display
+   - Ignores common non-code directories (node_modules, .git, etc.)
+
+2. **Added Analysis state management**
+   - Added `FileTreeNode` and `ProjectAnalysis` interfaces to store
+   - Added `projectAnalysis` and `isAnalyzing` state
+   - Added actions: `setProjectAnalysis`, `setIsAnalyzing`, `clearAnalysis`
+
+3. **Enhanced mock API for realistic testing**
+   - Extended mock readdir to return nested directory structure
+   - Mock provides src/, tests/, public/ subdirectories with files
+   - Returns file entries for various extensions (.ts, .tsx, .json, etc.)
+
+4. **Added comprehensive Playwright tests (7 new tests)**
+   - can navigate to analysis view when project is open
+   - analysis view shows 'No Analysis Yet' message initially
+   - shows 'Analyze Project' button
+   - can run project analysis
+   - analysis shows file tree after running
+   - analysis shows files by extension breakdown
+   - file tree displays correct structure with directories and files
+
+### Feature Marked as Passing This Session
+1. Analyze codebase file structure
+
+### Files Created/Modified
+- Created: `src/components/views/analysis-view.tsx`
+- Modified: `src/store/app-store.ts` (added analysis types and state)
+- Modified: `src/app/page.tsx` (added AnalysisView)
+- Modified: `src/components/layout/sidebar.tsx` (added Analysis navigation)
+- Modified: `src/lib/electron.ts` (enhanced mock readdir)
+- Created: `tests/analysis.spec.ts`
+
+### Next Steps (Priority Order)
+1. Integrate Claude 3.5 Opus SDK for AI functionality
+2. Implement Interactive New Project Interview (AI-powered)
+3. Implement agent file system tools (read, write, terminal)
+4. Generate app_spec.txt from existing code (requires AI)
+5. Generate feature_list.json from existing code (requires AI)
+
+### Current Status
+- 14/25 features passing (56%)
+- 44/44 Playwright tests passing
+- No critical bugs or console errors
+- Analysis feature complete with file tree scanning and statistics

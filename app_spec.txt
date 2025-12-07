@@ -1,0 +1,136 @@
+<project_specification>
+  <project_name>Automaker - Autonomous AI Development Studio</project_name>
+  
+  <overview>
+    Automaker is a native desktop application that empowers developers to build software autonomously. It acts as an intelligent orchestrator, managing the entire development lifecycle from specification to implementation. Built with Electron and Next.js, it provides a seamless GUI for configuring projects, defining requirements (app_spec.txt), and tracking progress via an interactive Kanban board. It leverages a dual-model architecture: Claude 3.5 Opus for complex logic/architecture and Gemini 3 Pro for UI/UX design.
+  </overview>
+
+  <technology_stack>
+    <frontend>
+      <framework>Next.js (App Router)</framework>
+      <ui_library>shadcn/ui</ui_library>
+      <styling>Tailwind CSS</styling>
+      <state_management>Zustand / TanStack Query</state_management>
+      <drag_drop>dnd-kit (for Kanban)</drag_drop>
+      <icons>Lucide React</icons>
+    </frontend>
+    <desktop_shell>
+      <framework>Electron</framework>
+      <language>TypeScript</language>
+      <inter_process_communication>Electron IPC (tRPC or raw IPC)</inter_process_communication>
+      <file_system>Node.js fs/promises</file_system>
+    </desktop_shell>
+    <ai_engine>
+      <logic_model>Claude 3.5 Opus (via Anthropic SDK)</logic_model>
+      <design_model>Gemini 3 Pro (via Google Generative AI SDK)</design_model>
+      <orchestration>LangChain or Custom Agent Loop</orchestration>
+    </ai_engine>
+    <testing>
+      <framework>Playwright (for E2E testing of Automaker itself)</framework>
+      <unit>Vitest</unit>
+    </testing>
+  </technology_stack>
+
+  <core_capabilities>
+    <project_management>
+      - Open existing local projects
+      - Create new projects from scratch (Wizard/Interview Mode)
+      - Project configuration (name, path, ignore patterns)
+      - Visual file explorer
+    </project_management>
+    
+    <intelligent_analysis>
+      - "Project Ingestion": Analyzes existing codebases to understand structure
+      - Auto-generation of `app_spec.txt` based on codebase analysis
+      - Auto-generation of `feature_list.json`:
+        - Scans code for implemented features
+        - Creates test cases for existing features
+        - Marks existing features as "passes": true automatically
+    </intelligent_analysis>
+
+    <kanban_workflow>
+      - Visual representation of `feature_list.json`
+      - Columns: Backlog, Planned, In Progress, Review, Verified (Passed), Failed
+      - Drag-and-drop interface to reprioritize tasks
+      - direct editing of feature details (steps, description) from the card
+      - "Play" button on cards to trigger the agent for that specific feature
+    </kanban_workflow>
+
+    <autonomous_agent_engine>
+      - **The Architect (Claude 3.5 Opus)**:
+        - Reads spec and feature list
+        - Plans implementation steps
+        - Writes functional code (backend, logic, state)
+        - Writes tests
+        - Uses standard prompts (e.g. `@autonomous-coding/prompts/coding_prompt.md`) to ensure quality and consistency.
+      - **The Designer (Gemini 3 Pro)**:
+        - Receives UI requirements
+        - Generates Tailwind classes and React components
+        - Ensures visual consistency and aesthetics
+      - **The Interviewer**:
+        - Interactive chat mode to gather requirements for new projects.
+        - Asks clarifying questions to define the `app_spec.txt`.
+        - Suggests tech stacks and features based on user intent.
+      - **The QA Bot**:
+        - Runs local tests (Playwright/Jest) in the target project
+        - Reports results back to the Kanban board
+        - Updates "passes" status automatically
+    </autonomous_agent_engine>
+
+    <extensibility>
+      - Workflow Editor: Configure the agent loop (e.g., Plan -> Code -> Test -> Review)
+      - Prompt Manager: Edit system prompts for Architect and Designer. Defaults to using `@autonomous-coding/prompts/coding_prompt.md` as the base instruction set.
+      - Model Registry: Add/Configure different models (OpenAI, Groq, local LLMs)
+      - Plugin System: Hooks for pre/post generation steps
+    </extensibility>
+  </core_capabilities>
+
+  <ui_layout>
+    <window_structure>
+      - Sidebar: Project List, Settings, Logs, Plugins
+      - Main Content:
+        - **Spec View**: Split editor for `app_spec.txt`
+        - **Board View**: Kanban board for `feature_list.json`
+        - **Code View**: Read-only Monaco editor to see what the agent is writing
+        - **Agent View**: Chat-like interface showing agent thought process and tool usage. Also used for the "New Project Interview".
+    </window_structure>
+    <theme>
+      - Dark/Light mode support (system sync)
+      - "Hacker" aesthetic option (terminal-like)
+      - Professional/Clean default
+    </theme>
+  </ui_layout>
+
+  <development_workflow>
+    <local_testing>
+      - "Browser Mode": Run the Next.js frontend in a standard browser with mocked Electron IPC for rapid UI iteration.
+      - "Electron Mode": Full desktop app testing.
+      - Hot Reloading for both Main and Renderer processes.
+    </local_testing>
+  </development_workflow>
+
+  <implementation_roadmap>
+    <phase_1_foundation>
+      - Setup Next.js + Electron boilerplate
+      - Implement IPC bridge
+      - Create Project Management UI (Open/Create)
+    </phase_1_foundation>
+    <phase_2_core_logic>
+      - Port python agent logic to TypeScript
+      - Implement "Project Ingestion" (Spec/Feature List generation)
+      - Integrate Claude 3.5 Opus and Gemini 3 Pro
+      - Implement "New Project Interview" workflow
+    </phase_2_core_logic>
+    <phase_3_kanban_and_interaction>
+      - Build Kanban board with drag-and-drop
+      - Connect Kanban state to `feature_list.json` filesystem
+      - Implement "Run Feature" capability
+      - Integrate standard prompts library
+    </phase_3_kanban_and_interaction>
+    <phase_4_polish>
+      - Advanced terminal integration
+      - Settings & Extensibility
+      - UI refinement
+    </phase_4_polish>
+  </implementation_roadmap>
+</project_specification>
