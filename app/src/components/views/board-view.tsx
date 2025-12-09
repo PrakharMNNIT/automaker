@@ -16,7 +16,7 @@ import {
   SortableContext,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { useAppStore, Feature } from "@/store/app-store";
+import { useAppStore, Feature, FeatureImage } from "@/store/app-store";
 import { getElectronAPI } from "@/lib/electron";
 import { cn } from "@/lib/utils";
 import {
@@ -28,6 +28,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { CategoryAutocomplete } from "@/components/ui/category-autocomplete";
+import { FeatureImageUpload } from "@/components/ui/feature-image-upload";
 import {
   Dialog,
   DialogContent,
@@ -69,6 +72,7 @@ export function BoardView() {
     category: "",
     description: "",
     steps: [""],
+    images: [] as FeatureImage[],
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isMounted, setIsMounted] = useState(false);
@@ -263,8 +267,9 @@ export function BoardView() {
       description: newFeature.description,
       steps: newFeature.steps.filter((s) => s.trim()),
       status: "backlog",
+      images: newFeature.images,
     });
-    setNewFeature({ category: "", description: "", steps: [""] });
+    setNewFeature({ category: "", description: "", steps: [""], images: [] });
     setShowAddDialog(false);
   };
 
@@ -549,7 +554,7 @@ export function BoardView() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="description">Description</Label>
-              <Input
+              <Textarea
                 id="description"
                 placeholder="Describe the feature..."
                 value={newFeature.description}

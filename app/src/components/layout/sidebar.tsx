@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
 import Link from "next/link";
@@ -21,8 +21,6 @@ import {
   PanelLeft,
   PanelLeftClose,
   Sparkles,
-  User,
-  LogOut,
   Cpu,
   ChevronDown,
   Check,
@@ -57,27 +55,6 @@ export function Sidebar() {
     removeProject,
   } = useAppStore();
 
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const userMenuRef = useRef<HTMLDivElement>(null);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        userMenuRef.current &&
-        !userMenuRef.current.contains(event.target as Node)
-      ) {
-        setUserMenuOpen(false);
-      }
-    }
-
-    if (userMenuOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () => {
-        document.removeEventListener("mousedown", handleClickOutside);
-      };
-    }
-  }, [userMenuOpen]);
 
   const navSections: NavSection[] = [
     {
@@ -113,7 +90,7 @@ export function Sidebar() {
       {/* Floating Collapse Toggle Button - Desktop only */}
       <button
         onClick={toggleSidebar}
-        className="hidden lg:flex absolute top-20 -right-3 z-50 items-center justify-center w-6 h-6 rounded-full bg-zinc-800 border border-white/10 text-zinc-400 hover:text-white hover:bg-zinc-700 hover:border-white/20 transition-all shadow-lg titlebar-no-drag"
+        className="hidden lg:flex absolute top-1/2 -translate-y-1/2 -right-3 z-50 items-center justify-center w-6 h-6 rounded-full bg-zinc-800 border border-white/10 text-zinc-400 hover:text-white hover:bg-zinc-700 hover:border-white/20 transition-all shadow-lg titlebar-no-drag"
         data-testid="sidebar-collapse-button"
         title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
       >
@@ -151,24 +128,26 @@ export function Sidebar() {
           </div>
 
           {/* Project Actions */}
-          <div className="flex items-center gap-1 titlebar-no-drag">
-            <button
-              onClick={() => setCurrentView("welcome")}
-              className="group flex items-center justify-center w-8 h-8 rounded-lg relative overflow-hidden transition-all text-zinc-400 hover:text-white hover:bg-white/5"
-              title="New Project"
-              data-testid="new-project-button"
-            >
-              <Plus className="w-4 h-4 flex-shrink-0" />
-            </button>
-            <button
-              onClick={() => setCurrentView("welcome")}
-              className="group flex items-center justify-center w-8 h-8 rounded-lg relative overflow-hidden transition-all text-zinc-400 hover:text-white hover:bg-white/5"
-              title="Open Project"
-              data-testid="open-project-button"
-            >
-              <FolderOpen className="w-4 h-4 flex-shrink-0" />
-            </button>
-          </div>
+          {sidebarOpen && (
+            <div className="flex items-center gap-1 titlebar-no-drag">
+              <button
+                onClick={() => setCurrentView("welcome")}
+                className="group flex items-center justify-center w-8 h-8 rounded-lg relative overflow-hidden transition-all text-zinc-400 hover:text-white hover:bg-white/5"
+                title="New Project"
+                data-testid="new-project-button"
+              >
+                <Plus className="w-4 h-4 flex-shrink-0" />
+              </button>
+              <button
+                onClick={() => setCurrentView("welcome")}
+                className="group flex items-center justify-center w-8 h-8 rounded-lg relative overflow-hidden transition-all text-zinc-400 hover:text-white hover:bg-white/5"
+                title="Open Project"
+                data-testid="open-project-button"
+              >
+                <FolderOpen className="w-4 h-4 flex-shrink-0" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Project Selector */}
@@ -215,73 +194,86 @@ export function Sidebar() {
 
         {/* Nav Items - Scrollable */}
         <nav className="flex-1 overflow-y-auto px-2 mt-4 pb-2">
-          {navSections.map((section, sectionIdx) => (
-            <div key={sectionIdx} className={sectionIdx > 0 ? "mt-6" : ""}>
-              {/* Section Label */}
-              {section.label && sidebarOpen && (
-                <div className="hidden lg:block px-4 mb-2">
-                  <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
-                    {section.label}
-                  </span>
-                </div>
-              )}
-              {section.label && !sidebarOpen && (
-                <div className="h-px bg-zinc-800 mx-2 mb-2"></div>
-              )}
+          {!currentProject && sidebarOpen ? (
+            // Placeholder when no project is selected (only in expanded state)
+            <div className="flex items-center justify-center h-full px-4">
+              <p className="text-zinc-500 text-sm text-center">
+                <span className="hidden lg:block">
+                  Select or create a project above
+                </span>
+              </p>
+            </div>
+          ) : currentProject ? (
+            // Navigation sections when project is selected
+            navSections.map((section, sectionIdx) => (
+              <div key={sectionIdx} className={sectionIdx > 0 ? "mt-6" : ""}>
+                {/* Section Label */}
+                {section.label && sidebarOpen && (
+                  <div className="hidden lg:block px-4 mb-2">
+                    <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
+                      {section.label}
+                    </span>
+                  </div>
+                )}
+                {section.label && !sidebarOpen && (
+                  <div className="h-px bg-zinc-800 mx-2 mb-2"></div>
+                )}
 
-              {/* Nav Items */}
-              <div className="space-y-1">
-                {section.items.map((item) => {
-                  const isActive = isActiveRoute(item.id);
-                  const Icon = item.icon;
+                {/* Nav Items */}
+                <div className="space-y-1">
+                  {section.items.map((item) => {
+                    const isActive = isActiveRoute(item.id);
+                    const Icon = item.icon;
 
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => setCurrentView(item.id as any)}
-                      className={cn(
-                        "group flex items-center w-full px-2 lg:px-3 py-2.5 rounded-lg relative overflow-hidden transition-all titlebar-no-drag",
-                        isActive
-                          ? "bg-white/5 text-white border border-white/10"
-                          : "text-zinc-400 hover:text-white hover:bg-white/5"
-                      )}
-                      title={!sidebarOpen ? item.label : undefined}
-                      data-testid={`nav-${item.id}`}
-                    >
-                      {isActive && (
-                        <div className="absolute inset-y-0 left-0 w-0.5 bg-brand-500 rounded-l-md"></div>
-                      )}
-                      <Icon
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => setCurrentView(item.id as any)}
                         className={cn(
-                          "w-4 h-4 flex-shrink-0 transition-colors",
+                          "group flex items-center w-full px-2 lg:px-3 py-2.5 rounded-lg relative overflow-hidden transition-all titlebar-no-drag",
                           isActive
-                            ? "text-brand-500"
-                            : "group-hover:text-brand-400"
+                            ? "bg-white/5 text-white border border-white/10"
+                            : "text-zinc-400 hover:text-white hover:bg-white/5",
+                          !sidebarOpen && "justify-center"
                         )}
-                      />
-                      <span
-                        className={cn(
-                          "ml-2.5 font-medium text-sm",
-                          sidebarOpen ? "hidden lg:block" : "hidden"
-                        )}
+                        title={!sidebarOpen ? item.label : undefined}
+                        data-testid={`nav-${item.id}`}
                       >
-                        {item.label}
-                      </span>
-                      {/* Tooltip for collapsed state */}
-                      {!sidebarOpen && (
+                        {isActive && (
+                          <div className="absolute inset-y-0 left-0 w-0.5 bg-brand-500 rounded-l-md"></div>
+                        )}
+                        <Icon
+                          className={cn(
+                            "w-4 h-4 flex-shrink-0 transition-colors",
+                            isActive
+                              ? "text-brand-500"
+                              : "group-hover:text-brand-400"
+                          )}
+                        />
                         <span
-                          className="absolute left-full ml-2 px-2 py-1 bg-zinc-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 border border-zinc-700"
-                          data-testid={`sidebar-tooltip-${item.label.toLowerCase()}`}
+                          className={cn(
+                            "ml-2.5 font-medium text-sm",
+                            sidebarOpen ? "hidden lg:block" : "hidden"
+                          )}
                         >
                           {item.label}
                         </span>
-                      )}
-                    </button>
-                  );
-                })}
+                        {/* Tooltip for collapsed state */}
+                        {!sidebarOpen && (
+                          <span
+                            className="absolute left-full ml-2 px-2 py-1 bg-zinc-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 border border-zinc-700"
+                            data-testid={`sidebar-tooltip-${item.label.toLowerCase()}`}
+                          >
+                            {item.label}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          ) : null}
         </nav>
       </div>
 
@@ -328,81 +320,6 @@ export function Sidebar() {
           </button>
         </div>
 
-        {/* User Profile */}
-        <div className="p-3 border-t border-zinc-800" ref={userMenuRef}>
-          <div className="relative">
-            <button
-              onClick={() => setUserMenuOpen(!userMenuOpen)}
-              className={cn(
-                "flex items-center p-1.5 rounded-lg transition-colors group relative w-full hover:bg-white/5 titlebar-no-drag",
-                sidebarOpen ? "lg:space-x-2.5" : "justify-center"
-              )}
-            >
-              <div className="relative">
-                <div className="w-8 h-8 rounded-full border border-zinc-600 bg-gradient-to-br from-brand-500 to-purple-600 flex items-center justify-center">
-                  <User className="w-4 h-4 text-white" />
-                </div>
-                <div className="absolute bottom-0 right-0 w-2 h-2 bg-green-500 border-2 border-zinc-900 rounded-full"></div>
-              </div>
-              <div
-                className={cn(
-                  "overflow-hidden",
-                  sidebarOpen ? "hidden lg:block" : "hidden"
-                )}
-              >
-                <p className="text-xs font-medium text-white truncate">
-                  Developer
-                </p>
-                <p className="text-[10px] text-zinc-500 truncate">
-                  Active Session
-                </p>
-              </div>
-              {/* Tooltip for user when collapsed */}
-              {!sidebarOpen && (
-                <span
-                  className="absolute left-full ml-2 px-2 py-1 bg-zinc-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 border border-zinc-700"
-                  data-testid="sidebar-tooltip-user"
-                >
-                  Developer
-                </span>
-              )}
-            </button>
-
-            {/* Dropdown Menu */}
-            {userMenuOpen && (
-              <div
-                className={cn(
-                  "absolute bottom-full mb-2 bg-zinc-800 border border-zinc-700 rounded-xl shadow-lg overflow-hidden z-50",
-                  sidebarOpen ? "left-0 right-0" : "left-0"
-                )}
-              >
-                <div className="py-2">
-                  <button
-                    onClick={() => {
-                      setUserMenuOpen(false);
-                      setCurrentView("settings");
-                    }}
-                    className="flex items-center w-full px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700/50 hover:text-white transition-colors titlebar-no-drag"
-                  >
-                    <Settings className="w-4 h-4 mr-3" />
-                    <span>Settings</span>
-                  </button>
-                  <div className="border-t border-zinc-700 my-2"></div>
-                  <button
-                    onClick={() => {
-                      setUserMenuOpen(false);
-                      // Add logout logic here if needed
-                    }}
-                    className="flex items-center w-full px-4 py-2 text-sm text-red-400 hover:bg-zinc-700/50 hover:text-red-300 transition-colors titlebar-no-drag"
-                  >
-                    <LogOut className="w-4 h-4 mr-3" />
-                    <span>Exit</span>
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
       </div>
     </aside>
   );

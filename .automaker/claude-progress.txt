@@ -41,8 +41,8 @@
 ### Next Steps (Priority Order)
 1. Complete "Create New Project" workflow - need to verify file creation works
 2. Complete "Open Existing Project" workflow - need to test with real Electron
-3. Implement "Load cards from feature_list.json" - connect to file system
-4. Implement drag-and-drop persistence to feature_list.json
+3. Implement "Load cards from .automaker/feature_list.json" - connect to file system
+4. Implement drag-and-drop persistence to .automaker/feature_list.json
 5. Add Settings page for API key management
 6. Integrate AI SDKs (Claude, Gemini) for agent functionality
 
@@ -65,7 +65,7 @@
 ### Accomplishments
 1. **Completed "Create New Project" workflow**
    - Full end-to-end workflow with dialog, name/path inputs
-   - Creates project folder with app_spec.txt and feature_list.json
+   - Creates project folder with app_spec.txt and .automaker/feature_list.json
    - Navigates to board view after creation
    - Project appears in recent projects list
 
@@ -73,8 +73,8 @@
    - Projects persist across page reloads
    - Recent projects section shows after creating projects
 
-3. **Implemented "Load cards from feature_list.json"**
-   - Cards load from mock feature_list.json
+3. **Implemented "Load cards from .automaker/feature_list.json"**
+   - Cards load from mock .automaker/feature_list.json
    - Cards appear in correct columns based on passes status
    - Features with passes:false go to Backlog
    - Features with passes:true go to Verified
@@ -82,26 +82,26 @@
 4. **Completed "Edit card details" feature**
    - Click edit button on any card to open edit dialog
    - Edit category, description, and steps
-   - Changes persist in feature_list.json
+   - Changes persist in .automaker/feature_list.json
    - Dialog pre-populates with existing data
 
 ### Features Marked as Passing This Session
 1. Create 'New Project' workflow
 2. Project List Persistence
-3. Load cards from feature_list.json
+3. Load cards from .automaker/feature_list.json
 4. Edit card details
 
 ### Playwright Tests Added
 - create button enables when name and path are entered
 - creates project and navigates to board view
 - created project appears in recent projects on welcome view
-- loads cards from feature_list.json and displays them in correct columns
+- loads cards from .automaker/feature_list.json and displays them in correct columns
 - features with passes:true appear in verified column
 - can edit feature card details
 - edit dialog shows existing feature data
 
 ### Next Steps (Priority Order)
-1. Implement drag-and-drop persistence (update feature_list.json on drag)
+1. Implement drag-and-drop persistence (update .automaker/feature_list.json on drag)
 2. Implement "Open Existing Project" workflow
 3. Add Settings page for API key management
 4. Integrate AI SDKs (Claude, Gemini) for agent functionality
@@ -125,7 +125,7 @@
    - Click Open Project card to trigger directory selection
    - Mock prompt dialog for testing in web mode
    - Project loads into dashboard with Kanban board
-   - Features load from mock feature_list.json
+   - Features load from mock .automaker/feature_list.json
    - Recent project cards can be clicked to reopen projects
 
 ### Additional Features Marked as Passing
@@ -137,7 +137,7 @@
 - can click on recent project to reopen it
 
 ### Next Steps (Priority Order)
-1. Implement drag-and-drop persistence (update feature_list.json on drag)
+1. Implement drag-and-drop persistence (update .automaker/feature_list.json on drag)
 2. Add Settings page for API key management
 3. Integrate AI SDKs (Claude, Gemini) for agent functionality
 
@@ -174,7 +174,7 @@
 - shows security notice about local storage
 
 ### Next Steps (Priority Order)
-1. Implement drag-and-drop persistence (update feature_list.json on drag)
+1. Implement drag-and-drop persistence (update .automaker/feature_list.json on drag)
 2. Integrate AI SDKs (Claude, Gemini) for agent functionality
 3. Implement Interactive New Project Interview (AI-powered)
 
@@ -195,7 +195,7 @@
    - Added touch-none CSS class to drag handles to prevent text selection
    - Feature uses PointerSensor with 8px activation distance
    - moveFeature action updates status in Zustand store
-   - saveFeatures effect writes updated feature_list.json to disk
+   - saveFeatures effect writes updated .automaker/feature_list.json to disk
 
 2. **Added Playwright tests for drag and drop**
    - Test: "can drag card from Backlog to In Progress column"
@@ -281,7 +281,7 @@
 2. Implement Interactive New Project Interview (AI-powered)
 3. Implement agent file system tools (read, write, terminal)
 4. Generate app_spec.txt from existing code (requires AI)
-5. Generate feature_list.json from existing code (requires AI)
+5. Generate .automaker/feature_list.json from existing code (requires AI)
 
 ### Current Status
 - 14/25 features passing (56%)

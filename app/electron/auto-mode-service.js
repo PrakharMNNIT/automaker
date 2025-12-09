@@ -88,7 +88,7 @@ class AutoModeService {
     try {
       // Load features
       const features = await this.loadFeatures();
-      const feature = features.find(f => f.id === featureId);
+      const feature = features.find((f) => f.id === featureId);
 
       if (!feature) {
         throw new Error(`Feature ${featureId} not found`);
@@ -141,7 +141,10 @@ class AutoModeService {
    * Verify a specific feature by running its tests
    */
   async verifyFeature({ projectPath, featureId, sendToRenderer }) {
-    console.log(`[AutoMode] verifyFeature called with:`, { projectPath, featureId });
+    console.log(`[AutoMode] verifyFeature called with:`, {
+      projectPath,
+      featureId,
+    });
 
     if (this.isRunning) {
       throw new Error("Auto mode is already running");
@@ -156,7 +159,7 @@ class AutoModeService {
     try {
       // Load features
       const features = await this.loadFeatures();
-      const feature = features.find(f => f.id === featureId);
+      const feature = features.find((f) => f.id === featureId);
 
       if (!feature) {
         throw new Error(`Feature ${featureId} not found`);
@@ -208,7 +211,7 @@ class AutoModeService {
   async runLoop() {
     while (this.isRunning) {
       try {
-        // Load features from feature_list.json
+        // Load features from .automaker/feature_list.json
         const features = await this.loadFeatures();
 
         // Find highest priority incomplete feature
@@ -269,10 +272,14 @@ class AutoModeService {
   }
 
   /**
-   * Load features from feature_list.json
+   * Load features from .automaker/feature_list.json
    */
   async loadFeatures() {
-    const featuresPath = path.join(this.projectPath, ".automaker", "feature_list.json");
+    const featuresPath = path.join(
+      this.projectPath,
+      ".automaker",
+      "feature_list.json"
+    );
 
     try {
       const content = await fs.readFile(featuresPath, "utf-8");
@@ -383,7 +390,8 @@ class AutoModeService {
       this.sendToRenderer({
         type: "auto_mode_progress",
         featureId: feature.id,
-        content: "Analyzing codebase structure and creating implementation plan...",
+        content:
+          "Analyzing codebase structure and creating implementation plan...",
       });
 
       // Small delay to show planning phase
@@ -472,7 +480,8 @@ class AutoModeService {
       });
       console.log(`[AutoMode] Phase: VERIFICATION for ${feature.description}`);
 
-      const checkingMsg = "Verifying implementation and checking test results...\n";
+      const checkingMsg =
+        "Verifying implementation and checking test results...\n";
       await this.writeToContextFile(feature.id, checkingMsg);
       this.sendToRenderer({
         type: "auto_mode_progress",
@@ -523,11 +532,11 @@ class AutoModeService {
   }
 
   /**
-   * Update feature status in feature_list.json
+   * Update feature status in .automaker/feature_list.json
    */
   async updateFeatureStatus(featureId, status) {
     const features = await this.loadFeatures();
-    const feature = features.find(f => f.id === featureId);
+    const feature = features.find((f) => f.id === featureId);
 
     if (!feature) {
       console.error(`[AutoMode] Feature ${featureId} not found`);
@@ -538,7 +547,11 @@ class AutoModeService {
     feature.status = status;
 
     // Save back to file
-    const featuresPath = path.join(this.projectPath, ".automaker", "feature_list.json");
+    const featuresPath = path.join(
+      this.projectPath,
+      ".automaker",
+      "feature_list.json"
+    );
     const toSave = features.map((f) => ({
       id: f.id,
       category: f.category,
@@ -575,14 +588,7 @@ class AutoModeService {
         systemPrompt: this.getVerificationPrompt(),
         maxTurns: 15,
         cwd: this.projectPath,
-        allowedTools: [
-          "Read",
-          "Write",
-          "Edit",
-          "Glob",
-          "Grep",
-          "Bash",
-        ],
+        allowedTools: ["Read", "Write", "Edit", "Glob", "Grep", "Bash"],
         permissionMode: "acceptEdits",
         sandbox: {
           enabled: true,
@@ -593,7 +599,8 @@ class AutoModeService {
 
       const prompt = this.buildVerificationPrompt(feature);
 
-      const runningTestsMsg = "Running Playwright tests to verify feature implementation...\n";
+      const runningTestsMsg =
+        "Running Playwright tests to verify feature implementation...\n";
       await this.writeToContextFile(feature.id, runningTestsMsg);
 
       this.sendToRenderer({
@@ -697,8 +704,9 @@ ${feature.steps.map((step, i) => `${i + 1}. ${step}`).join("\n")}
 2. Implement the feature according to the description and steps
 3. Write Playwright tests to verify the feature works correctly
 4. Run the tests and ensure they pass
-5. Update feature_list.json to mark this feature as "status": "verified"
-6. Commit your changes with git
+5. **DELETE the test file(s) you created** - tests are only for immediate verification
+6. Update .automaker/feature_list.json to mark this feature as "status": "verified"
+7. Commit your changes with git
 
 **Important Guidelines:**
 
@@ -708,7 +716,14 @@ ${feature.steps.map((step, i) => `${i + 1}. ${step}`).join("\n")}
 - Write comprehensive Playwright tests
 - Ensure all existing tests still pass
 - Mark the feature as passing only when all tests are green
+- **CRITICAL: Delete test files after verification** - tests accumulate and become brittle
 - Make a git commit when complete
+
+**Test Deletion Policy:**
+After tests pass, delete them immediately:
+\`\`\`bash
+rm tests/[feature-name].spec.ts
+\`\`\`
 
 Begin by reading the project structure and then implementing the feature.`;
   }
@@ -731,24 +746,32 @@ ${feature.steps.map((step, i) => `${i + 1}. ${step}`).join("\n")}
 
 **Your Task:**
 
-1. Read the feature_list.json file to see the current status
+1. Read the .automaker/feature_list.json file to see the current status
 2. Look for Playwright tests related to this feature
-3. Run the Playwright tests for this feature: npx playwright test
+3. Run the Playwright tests for this feature: npx playwright test tests/[feature-name].spec.ts
 4. Check if all tests pass
 5. If ALL tests pass:
-   - Update feature_list.json to set this feature's "status" to "verified"
-   - Explain what tests passed
+   - **DELETE the test file(s) for this feature** - tests are only for immediate verification
+   - Update .automaker/feature_list.json to set this feature's "status" to "verified"
+   - Explain what tests passed and that you deleted them
 6. If ANY tests fail:
-   - Keep the feature "status" as "in_progress" in feature_list.json
+   - Keep the feature "status" as "in_progress" in .automaker/feature_list.json
    - Explain what tests failed and why
+7. Fix the issues until the tests pass again
+
+**Test Deletion Policy:**
+After tests pass, delete them immediately:
+\`\`\`bash
+rm tests/[feature-name].spec.ts
+\`\`\`
 
 **Important:**
-- Only mark as "verified" if ALL Playwright tests pass
-- Do NOT implement new code - only verify existing implementation
-- Focus on running tests and updating the status accurately
+- Only mark as "verified" if Playwright tests pass
+- **CRITICAL: Delete test files after they pass** - tests should not accumulate
+- Focus on running tests, deleting them, and updating the status accurately
 - Be thorough in checking test results
 
-Begin by reading feature_list.json and finding the appropriate tests to run.`;
+Begin by reading .automaker/feature_list.json and finding the appropriate tests to run.`;
   }
 
   /**
@@ -759,17 +782,25 @@ Begin by reading feature_list.json and finding the appropriate tests to run.`;
 
 Your role is to:
 - Run Playwright tests to verify feature implementations
-- Accurately report test results
-- Update feature status in feature_list.json based on test outcomes
-- Only mark features as "verified" when ALL tests pass
-- Keep features as "in_progress" if tests fail
+- If other tests fail, verify if those tests are still accurate or should be updated or deleted
+- Continue rerunning tests until all tests pass
+- **DELETE test files after successful verification** - tests are only for immediate feature verification
+- Update feature status to verified in .automaker/feature_list.json after all tests pass
+
+**Test Deletion Policy:**
+Tests should NOT accumulate. After a feature is verified:
+1. Delete the test file for that feature
+2. Mark the feature as "verified" in feature_list.json
+
+This prevents test brittleness as the app changes rapidly.
 
 You have access to:
 - Read and edit files
 - Run bash commands (especially Playwright tests)
+- Delete files (rm command)
 - Analyze test output
 
-Be accurate and thorough in your verification process.`;
+Be accurate and thorough in your verification process. Always delete tests after they pass.`;
   }
 
   /**
@@ -783,17 +814,27 @@ Your role is to:
 - Write production-quality code
 - Create comprehensive Playwright tests
 - Ensure all tests pass before marking features complete
+- **DELETE test files after successful verification** - tests are only for immediate feature verification
 - Commit working code to git
 - Be thorough and detail-oriented
+
+**Test Deletion Policy:**
+Tests should NOT accumulate. After a feature is verified:
+1. Run the tests to ensure they pass
+2. Delete the test file for that feature
+3. Mark the feature as "verified" in .automaker/feature_list.json
+
+This prevents test brittleness as the app changes rapidly.
 
 You have full access to:
 - Read and write files
 - Run bash commands
 - Execute tests
+- Delete files (rm command)
 - Make git commits
 - Search and analyze the codebase
 
-Focus on one feature at a time and complete it fully before finishing.`;
+Focus on one feature at a time and complete it fully before finishing. Always delete tests after they pass.`;
   }
 
   /**

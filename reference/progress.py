@@ -11,10 +11,10 @@ from pathlib import Path
 
 def count_passing_tests(project_dir: Path) -> tuple[int, int]:
     """
-    Count passing and total tests in feature_list.json.
+    Count passing and total tests in .automaker/feature_list.json.
 
     Args:
-        project_dir: Directory containing feature_list.json
+        project_dir: Directory containing .automaker/feature_list.json
 
     Returns:
         (passing_count, total_count)
@@ -54,4 +54,4 @@ def print_progress_summary(project_dir: Path) -> None:
         percentage = (passing / total) * 100
         print(f"\nProgress: {passing}/{total} tests passing ({percentage:.1f}%)")
     else:
-        print("\nProgress: feature_list.json not yet created")
+        print("\nProgress: .automaker/feature_list.json not yet created")

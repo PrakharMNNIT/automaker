@@ -200,16 +200,22 @@ export function AnalysisView() {
 
       // Read key files to understand the project better
       const fileContents: Record<string, string> = {};
-      const keyFiles = ['package.json', 'README.md', 'tsconfig.json'];
+      const keyFiles = ["package.json", "README.md", "tsconfig.json"];
 
       // Collect file paths from analysis
-      const collectFilePaths = (nodes: FileTreeNode[], maxDepth: number = 3, currentDepth: number = 0): string[] => {
+      const collectFilePaths = (
+        nodes: FileTreeNode[],
+        maxDepth: number = 3,
+        currentDepth: number = 0
+      ): string[] => {
         const paths: string[] = [];
         for (const node of nodes) {
           if (!node.isDirectory) {
             paths.push(node.path);
           } else if (node.children && currentDepth < maxDepth) {
-            paths.push(...collectFilePaths(node.children, maxDepth, currentDepth + 1));
+            paths.push(
+              ...collectFilePaths(node.children, maxDepth, currentDepth + 1)
+            );
           }
         }
         return paths;
@@ -235,31 +241,40 @@ export function AnalysisView() {
         const extensions = projectAnalysis.filesByExtension;
 
         // Check package.json for dependencies
-        if (fileContents['package.json']) {
+        if (fileContents["package.json"]) {
           try {
-            const pkg = JSON.parse(fileContents['package.json']);
-            if (pkg.dependencies?.react || pkg.dependencies?.['react-dom']) stack.push('React');
-            if (pkg.dependencies?.next) stack.push('Next.js');
-            if (pkg.dependencies?.vue) stack.push('Vue');
-            if (pkg.dependencies?.angular) stack.push('Angular');
-            if (pkg.dependencies?.express) stack.push('Express');
-            if (pkg.dependencies?.electron) stack.push('Electron');
-            if (pkg.devDependencies?.typescript || pkg.dependencies?.typescript) stack.push('TypeScript');
-            if (pkg.devDependencies?.tailwindcss || pkg.dependencies?.tailwindcss) stack.push('Tailwind CSS');
-            if (pkg.devDependencies?.playwright || pkg.dependencies?.playwright) stack.push('Playwright');
-            if (pkg.devDependencies?.jest || pkg.dependencies?.jest) stack.push('Jest');
+            const pkg = JSON.parse(fileContents["package.json"]);
+            if (pkg.dependencies?.react || pkg.dependencies?.["react-dom"])
+              stack.push("React");
+            if (pkg.dependencies?.next) stack.push("Next.js");
+            if (pkg.dependencies?.vue) stack.push("Vue");
+            if (pkg.dependencies?.angular) stack.push("Angular");
+            if (pkg.dependencies?.express) stack.push("Express");
+            if (pkg.dependencies?.electron) stack.push("Electron");
+            if (pkg.devDependencies?.typescript || pkg.dependencies?.typescript)
+              stack.push("TypeScript");
+            if (
+              pkg.devDependencies?.tailwindcss ||
+              pkg.dependencies?.tailwindcss
+            )
+              stack.push("Tailwind CSS");
+            if (pkg.devDependencies?.playwright || pkg.dependencies?.playwright)
+              stack.push("Playwright");
+            if (pkg.devDependencies?.jest || pkg.dependencies?.jest)
+              stack.push("Jest");
           } catch {
             // Ignore JSON parse errors
           }
         }
 
         // Detect by file extensions
-        if (extensions['ts'] || extensions['tsx']) stack.push('TypeScript');
-        if (extensions['py']) stack.push('Python');
-        if (extensions['go']) stack.push('Go');
-        if (extensions['rs']) stack.push('Rust');
-        if (extensions['java']) stack.push('Java');
-        if (extensions['css'] || extensions['scss'] || extensions['sass']) stack.push('CSS/SCSS');
+        if (extensions["ts"] || extensions["tsx"]) stack.push("TypeScript");
+        if (extensions["py"]) stack.push("Python");
+        if (extensions["go"]) stack.push("Go");
+        if (extensions["rs"]) stack.push("Rust");
+        if (extensions["java"]) stack.push("Java");
+        if (extensions["css"] || extensions["scss"] || extensions["sass"])
+          stack.push("CSS/SCSS");
 
         // Remove duplicates
         return [...new Set(stack)];
@@ -267,9 +282,9 @@ export function AnalysisView() {
 
       // Get project name from package.json or folder name
       const getProjectName = () => {
-        if (fileContents['package.json']) {
+        if (fileContents["package.json"]) {
           try {
-            const pkg = JSON.parse(fileContents['package.json']);
+            const pkg = JSON.parse(fileContents["package.json"]);
             if (pkg.name) return pkg.name;
           } catch {
             // Ignore JSON parse errors
@@ -281,36 +296,43 @@ export function AnalysisView() {
 
       // Get project description from package.json or README
       const getProjectDescription = () => {
-        if (fileContents['package.json']) {
+        if (fileContents["package.json"]) {
           try {
-            const pkg = JSON.parse(fileContents['package.json']);
+            const pkg = JSON.parse(fileContents["package.json"]);
             if (pkg.description) return pkg.description;
           } catch {
             // Ignore JSON parse errors
           }
         }
-        if (fileContents['README.md']) {
+        if (fileContents["README.md"]) {
           // Extract first paragraph from README
-          const lines = fileContents['README.md'].split('\n');
+          const lines = fileContents["README.md"].split("\n");
           for (const line of lines) {
             const trimmed = line.trim();
-            if (trimmed && !trimmed.startsWith('#') && !trimmed.startsWith('!') && trimmed.length > 20) {
+            if (
+              trimmed &&
+              !trimmed.startsWith("#") &&
+              !trimmed.startsWith("!") &&
+              trimmed.length > 20
+            ) {
               return trimmed.substring(0, 200);
             }
           }
         }
-        return 'A software project';
+        return "A software project";
       };
 
       // Group files by directory for structure analysis
       const analyzeStructure = () => {
         const structure: string[] = [];
-        const topLevelDirs = projectAnalysis.fileTree.filter(n => n.isDirectory).map(n => n.name);
+        const topLevelDirs = projectAnalysis.fileTree
+          .filter((n) => n.isDirectory)
+          .map((n) => n.name);
 
         for (const dir of topLevelDirs) {
           structure.push(`      <directory name="${dir}" />`);
         }
-        return structure.join('\n');
+        return structure.join("\n");
       };
 
       const projectName = getProjectName();
@@ -328,14 +350,18 @@ export function AnalysisView() {
   <technology_stack>
     <languages>
 ${Object.entries(projectAnalysis.filesByExtension)
-  .filter(([ext]) => ['ts', 'tsx', 'js', 'jsx', 'py', 'go', 'rs', 'java', 'cpp', 'c'].includes(ext))
+  .filter(([ext]) =>
+    ["ts", "tsx", "js", "jsx", "py", "go", "rs", "java", "cpp", "c"].includes(
+      ext
+    )
+  )
   .sort((a, b) => b[1] - a[1])
   .slice(0, 5)
   .map(([ext, count]) => `      <language ext=".${ext}" count="${count}" />`)
-  .join('\n')}
+  .join("\n")}
     </languages>
     <frameworks>
-${techStack.map(tech => `      <framework>${tech}</framework>`).join('\n')}
+${techStack.map((tech) => `      <framework>${tech}</framework>`).join("\n")}
     </frameworks>
   </technology_stack>
 
@@ -351,8 +377,13 @@ ${analyzeStructure()}
 ${Object.entries(projectAnalysis.filesByExtension)
   .sort((a, b) => b[1] - a[1])
   .slice(0, 10)
-  .map(([ext, count]) => `    <extension type="${ext.startsWith('(') ? ext : '.' + ext}" count="${count}" />`)
-  .join('\n')}
+  .map(
+    ([ext, count]) =>
+      `    <extension type="${
+        ext.startsWith("(") ? ext : "." + ext
+      }" count="${count}" />`
+  )
+  .join("\n")}
   </file_breakdown>
 
   <analyzed_at>${projectAnalysis.analyzedAt}</analyzed_at>
@@ -366,17 +397,19 @@ ${Object.entries(projectAnalysis.filesByExtension)
       if (writeResult.success) {
         setSpecGenerated(true);
       } else {
-        setSpecError(writeResult.error || 'Failed to write spec file');
+        setSpecError(writeResult.error || "Failed to write spec file");
       }
     } catch (error) {
-      console.error('Failed to generate spec:', error);
-      setSpecError(error instanceof Error ? error.message : 'Failed to generate spec');
+      console.error("Failed to generate spec:", error);
+      setSpecError(
+        error instanceof Error ? error.message : "Failed to generate spec"
+      );
     } finally {
       setIsGeneratingSpec(false);
     }
   }, [currentProject, projectAnalysis]);
 
-  // Generate feature_list.json from analysis
+  // Generate .automaker/feature_list.json from analysis
   const generateFeatureList = useCallback(async () => {
     if (!currentProject || !projectAnalysis) return;
 
@@ -389,7 +422,7 @@ ${Object.entries(projectAnalysis.filesByExtension)
 
       // Read key files to understand the project
       const fileContents: Record<string, string> = {};
-      const keyFiles = ['package.json', 'README.md'];
+      const keyFiles = ["package.json", "README.md"];
 
       // Try to read key configuration files
       for (const keyFile of keyFiles) {
@@ -431,14 +464,21 @@ ${Object.entries(projectAnalysis.filesByExtension)
       // Detect features based on project structure and files
       const detectFeatures = () => {
         const extensions = projectAnalysis.filesByExtension;
-        const topLevelDirs = projectAnalysis.fileTree.filter(n => n.isDirectory).map(n => n.name.toLowerCase());
-        const topLevelFiles = projectAnalysis.fileTree.filter(n => !n.isDirectory).map(n => n.name.toLowerCase());
+        const topLevelDirs = projectAnalysis.fileTree
+          .filter((n) => n.isDirectory)
+          .map((n) => n.name.toLowerCase());
+        const topLevelFiles = projectAnalysis.fileTree
+          .filter((n) => !n.isDirectory)
+          .map((n) => n.name.toLowerCase());
 
         // Check for test directories and files
-        const hasTests = topLevelDirs.includes('tests') ||
-                         topLevelDirs.includes('test') ||
-                         topLevelDirs.includes('__tests__') ||
-                         allFilePaths.some(p => p.includes('.spec.') || p.includes('.test.'));
+        const hasTests =
+          topLevelDirs.includes("tests") ||
+          topLevelDirs.includes("test") ||
+          topLevelDirs.includes("__tests__") ||
+          allFilePaths.some(
+            (p) => p.includes(".spec.") || p.includes(".test.")
+          );
 
         if (hasTests) {
           detectedFeatures.push({
@@ -447,15 +487,16 @@ ${Object.entries(projectAnalysis.filesByExtension)
             steps: [
               "Step 1: Tests directory exists",
               "Step 2: Test files are present",
-              "Step 3: Run test suite"
+              "Step 3: Run test suite",
             ],
-            passes: true
+            passes: true,
           });
         }
 
         // Check for components directory (UI components)
-        const hasComponents = topLevelDirs.includes('components') ||
-                             allFilePaths.some(p => p.toLowerCase().includes('/components/'));
+        const hasComponents =
+          topLevelDirs.includes("components") ||
+          allFilePaths.some((p) => p.toLowerCase().includes("/components/"));
 
         if (hasComponents) {
           detectedFeatures.push({
@@ -464,42 +505,42 @@ ${Object.entries(projectAnalysis.filesByExtension)
             steps: [
               "Step 1: Components directory exists",
               "Step 2: UI components are defined",
-              "Step 3: Components are reusable"
+              "Step 3: Components are reusable",
             ],
-            passes: true
+            passes: true,
           });
         }
 
         // Check for src directory (organized source code)
-        if (topLevelDirs.includes('src')) {
+        if (topLevelDirs.includes("src")) {
           detectedFeatures.push({
             category: "Project Structure",
             description: "Organized source code structure",
             steps: [
               "Step 1: Source directory exists",
               "Step 2: Code is properly organized",
-              "Step 3: Follows best practices"
+              "Step 3: Follows best practices",
             ],
-            passes: true
+            passes: true,
           });
         }
 
         // Check package.json for dependencies and detect features
-        if (fileContents['package.json']) {
+        if (fileContents["package.json"]) {
           try {
-            const pkg = JSON.parse(fileContents['package.json']);
+            const pkg = JSON.parse(fileContents["package.json"]);
 
             // React/Next.js app detection
-            if (pkg.dependencies?.react || pkg.dependencies?.['react-dom']) {
+            if (pkg.dependencies?.react || pkg.dependencies?.["react-dom"]) {
               detectedFeatures.push({
                 category: "Frontend",
                 description: "React-based user interface",
                 steps: [
                   "Step 1: React is installed",
                   "Step 2: Components render correctly",
-                  "Step 3: State management works"
+                  "Step 3: State management works",
                 ],
-                passes: true
+                passes: true,
               });
             }
 
@@ -510,37 +551,45 @@ ${Object.entries(projectAnalysis.filesByExtension)
                 steps: [
                   "Step 1: Next.js is configured",
                   "Step 2: Pages/routes are defined",
-                  "Step 3: Server-side rendering works"
+                  "Step 3: Server-side rendering works",
                 ],
-                passes: true
+                passes: true,
               });
             }
 
             // TypeScript support
-            if (pkg.devDependencies?.typescript || pkg.dependencies?.typescript || extensions['ts'] || extensions['tsx']) {
+            if (
+              pkg.devDependencies?.typescript ||
+              pkg.dependencies?.typescript ||
+              extensions["ts"] ||
+              extensions["tsx"]
+            ) {
               detectedFeatures.push({
                 category: "Developer Experience",
                 description: "TypeScript type safety",
                 steps: [
                   "Step 1: TypeScript is configured",
                   "Step 2: Type definitions exist",
-                  "Step 3: Code compiles without errors"
+                  "Step 3: Code compiles without errors",
                 ],
-                passes: true
+                passes: true,
               });
             }
 
             // Tailwind CSS
-            if (pkg.devDependencies?.tailwindcss || pkg.dependencies?.tailwindcss) {
+            if (
+              pkg.devDependencies?.tailwindcss ||
+              pkg.dependencies?.tailwindcss
+            ) {
               detectedFeatures.push({
                 category: "UI/Design",
                 description: "Tailwind CSS styling",
                 steps: [
                   "Step 1: Tailwind is configured",
                   "Step 2: Styles are applied",
-                  "Step 3: Responsive design works"
+                  "Step 3: Responsive design works",
                 ],
-                passes: true
+                passes: true,
               });
             }
 
@@ -552,9 +601,9 @@ ${Object.entries(projectAnalysis.filesByExtension)
                 steps: [
                   "Step 1: Linter is configured",
                   "Step 2: Code passes lint checks",
-                  "Step 3: Formatting is consistent"
+                  "Step 3: Formatting is consistent",
                 ],
-                passes: true
+                passes: true,
               });
             }
 
@@ -566,49 +615,55 @@ ${Object.entries(projectAnalysis.filesByExtension)
                 steps: [
                   "Step 1: Electron is configured",
                   "Step 2: Main process runs",
-                  "Step 3: Renderer process loads"
+                  "Step 3: Renderer process loads",
                 ],
-                passes: true
+                passes: true,
               });
             }
 
             // Playwright testing
-            if (pkg.devDependencies?.playwright || pkg.devDependencies?.['@playwright/test']) {
+            if (
+              pkg.devDependencies?.playwright ||
+              pkg.devDependencies?.["@playwright/test"]
+            ) {
               detectedFeatures.push({
                 category: "Testing",
                 description: "Playwright end-to-end testing",
                 steps: [
                   "Step 1: Playwright is configured",
                   "Step 2: E2E tests are defined",
-                  "Step 3: Tests pass successfully"
+                  "Step 3: Tests pass successfully",
                 ],
-                passes: true
+                passes: true,
               });
             }
-
           } catch {
             // Ignore JSON parse errors
           }
         }
 
         // Check for documentation
-        if (topLevelFiles.includes('readme.md') || topLevelDirs.includes('docs')) {
+        if (
+          topLevelFiles.includes("readme.md") ||
+          topLevelDirs.includes("docs")
+        ) {
           detectedFeatures.push({
             category: "Documentation",
             description: "Project documentation",
             steps: [
               "Step 1: README exists",
               "Step 2: Documentation is comprehensive",
-              "Step 3: Setup instructions are clear"
+              "Step 3: Setup instructions are clear",
             ],
-            passes: true
+            passes: true,
           });
         }
 
         // Check for CI/CD configuration
-        const hasCICD = topLevelDirs.includes('.github') ||
-                        topLevelFiles.includes('.gitlab-ci.yml') ||
-                        topLevelFiles.includes('.travis.yml');
+        const hasCICD =
+          topLevelDirs.includes(".github") ||
+          topLevelFiles.includes(".gitlab-ci.yml") ||
+          topLevelFiles.includes(".travis.yml");
 
         if (hasCICD) {
           detectedFeatures.push({
@@ -617,17 +672,18 @@ ${Object.entries(projectAnalysis.filesByExtension)
             steps: [
               "Step 1: CI config exists",
               "Step 2: Pipeline runs on push",
-              "Step 3: Automated checks pass"
+              "Step 3: Automated checks pass",
             ],
-            passes: true
+            passes: true,
           });
         }
 
         // Check for API routes (Next.js API or Express)
-        const hasAPIRoutes = allFilePaths.some(p =>
-          p.includes('/api/') ||
-          p.includes('/routes/') ||
-          p.includes('/endpoints/')
+        const hasAPIRoutes = allFilePaths.some(
+          (p) =>
+            p.includes("/api/") ||
+            p.includes("/routes/") ||
+            p.includes("/endpoints/")
         );
 
         if (hasAPIRoutes) {
@@ -637,18 +693,19 @@ ${Object.entries(projectAnalysis.filesByExtension)
             steps: [
               "Step 1: API routes are defined",
               "Step 2: Endpoints respond correctly",
-              "Step 3: Error handling is implemented"
+              "Step 3: Error handling is implemented",
             ],
-            passes: true
+            passes: true,
           });
         }
 
         // Check for state management
-        const hasStateManagement = allFilePaths.some(p =>
-          p.includes('/store/') ||
-          p.includes('/stores/') ||
-          p.includes('/redux/') ||
-          p.includes('/context/')
+        const hasStateManagement = allFilePaths.some(
+          (p) =>
+            p.includes("/store/") ||
+            p.includes("/stores/") ||
+            p.includes("/redux/") ||
+            p.includes("/context/")
         );
 
         if (hasStateManagement) {
@@ -658,23 +715,26 @@ ${Object.entries(projectAnalysis.filesByExtension)
             steps: [
               "Step 1: Store is configured",
               "Step 2: State updates correctly",
-              "Step 3: Components access state"
+              "Step 3: Components access state",
             ],
-            passes: true
+            passes: true,
           });
         }
 
         // Check for configuration files
-        if (topLevelFiles.includes('tsconfig.json') || topLevelFiles.includes('package.json')) {
+        if (
+          topLevelFiles.includes("tsconfig.json") ||
+          topLevelFiles.includes("package.json")
+        ) {
           detectedFeatures.push({
             category: "Configuration",
             description: "Project configuration files",
             steps: [
               "Step 1: Config files exist",
               "Step 2: Configuration is valid",
-              "Step 3: Build process works"
+              "Step 3: Build process works",
             ],
-            passes: true
+            passes: true,
           });
         }
       };
@@ -689,9 +749,9 @@ ${Object.entries(projectAnalysis.filesByExtension)
           steps: [
             "Step 1: Project directory exists",
             "Step 2: Files are present",
-            "Step 3: Project can be loaded"
+            "Step 3: Project can be loaded",
           ],
-          passes: true
+          passes: true,
         });
       }
 
@@ -700,16 +760,25 @@ ${Object.entries(projectAnalysis.filesByExtension)
 
       // Write the feature list file
       const featureListPath = `${currentProject.path}/feature_list.json`;
-      const writeResult = await api.writeFile(featureListPath, featureListContent);
+      const writeResult = await api.writeFile(
+        featureListPath,
+        featureListContent
+      );
 
       if (writeResult.success) {
         setFeatureListGenerated(true);
       } else {
-        setFeatureListError(writeResult.error || 'Failed to write feature list file');
+        setFeatureListError(
+          writeResult.error || "Failed to write feature list file"
+        );
       }
     } catch (error) {
-      console.error('Failed to generate feature list:', error);
-      setFeatureListError(error instanceof Error ? error.message : 'Failed to generate feature list');
+      console.error("Failed to generate feature list:", error);
+      setFeatureListError(
+        error instanceof Error
+          ? error.message
+          : "Failed to generate feature list"
+      );
     } finally {
       setIsGeneratingFeatureList(false);
     }
@@ -922,7 +991,8 @@ ${Object.entries(projectAnalysis.filesByExtension)
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <p className="text-sm text-muted-foreground">
-                    Generate a project specification file based on the analyzed codebase structure and detected technologies.
+                    Generate a project specification file based on the analyzed
+                    codebase structure and detected technologies.
                   </p>
                   <Button
                     onClick={generateSpec}
@@ -943,13 +1013,19 @@ ${Object.entries(projectAnalysis.filesByExtension)
                     )}
                   </Button>
                   {specGenerated && (
-                    <div className="flex items-center gap-2 text-sm text-green-500" data-testid="spec-generated-success">
+                    <div
+                      className="flex items-center gap-2 text-sm text-green-500"
+                      data-testid="spec-generated-success"
+                    >
                       <CheckCircle className="w-4 h-4" />
                       <span>app_spec.txt created successfully!</span>
                     </div>
                   )}
                   {specError && (
-                    <div className="flex items-center gap-2 text-sm text-red-500" data-testid="spec-generated-error">
+                    <div
+                      className="flex items-center gap-2 text-sm text-red-500"
+                      data-testid="spec-generated-error"
+                    >
                       <AlertCircle className="w-4 h-4" />
                       <span>{specError}</span>
                     </div>
@@ -965,12 +1041,14 @@ ${Object.entries(projectAnalysis.filesByExtension)
                     Generate Feature List
                   </CardTitle>
                   <CardDescription>
-                    Create feature_list.json from analysis
+                    Create .automaker/feature_list.json from analysis
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <p className="text-sm text-muted-foreground">
-                    Automatically detect and generate a feature list based on the analyzed codebase structure, dependencies, and project configuration.
+                    Automatically detect and generate a feature list based on
+                    the analyzed codebase structure, dependencies, and project
+                    configuration.
                   </p>
                   <Button
                     onClick={generateFeatureList}
@@ -991,13 +1069,19 @@ ${Object.entries(projectAnalysis.filesByExtension)
                     )}
                   </Button>
                   {featureListGenerated && (
-                    <div className="flex items-center gap-2 text-sm text-green-500" data-testid="feature-list-generated-success">
+                    <div
+                      className="flex items-center gap-2 text-sm text-green-500"
+                      data-testid="feature-list-generated-success"
+                    >
                       <CheckCircle className="w-4 h-4" />
                       <span>feature_list.json created successfully!</span>
                     </div>
                   )}
                   {featureListError && (
-                    <div className="flex items-center gap-2 text-sm text-red-500" data-testid="feature-list-generated-error">
+                    <div
+                      className="flex items-center gap-2 text-sm text-red-500"
+                      data-testid="feature-list-generated-error"
+                    >
                       <AlertCircle className="w-4 h-4" />
                       <span>{featureListError}</span>
                     </div>

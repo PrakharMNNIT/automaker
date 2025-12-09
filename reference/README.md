@@ -103,7 +103,7 @@ After running, your project directory will contain:
 
 ```
 my_project/
-├── feature_list.json         # Test cases (source of truth)
+├── .automaker/feature_list.json         # Test cases (source of truth)
 ├── app_spec.txt              # Copied specification
 ├── init.sh                   # Environment setup script
 ├── claude-progress.txt       # Session progress notes

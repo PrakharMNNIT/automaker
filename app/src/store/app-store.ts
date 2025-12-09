@@ -401,6 +401,7 @@ export const useAppStore = create<AppState & AppActions>()(
       name: "automaker-storage",
       partialize: (state) => ({
         projects: state.projects,
+        currentProject: state.currentProject,
         theme: state.theme,
         sidebarOpen: state.sidebarOpen,
         apiKeys: state.apiKeys,

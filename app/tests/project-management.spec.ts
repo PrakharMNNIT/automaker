@@ -1,7 +1,9 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("New Project Workflow", () => {
-  test("opens new project dialog when clicking Create Project", async ({ page }) => {
+  test("opens new project dialog when clicking Create Project", async ({
+    page,
+  }) => {
     await page.goto("/");
 
     // Click the New Project card
@@ -42,7 +44,9 @@ test.describe("New Project Workflow", () => {
 
     // Enter project name
     await page.getByTestId("project-name-input").fill("my-test-project");
-    await expect(page.getByTestId("project-name-input")).toHaveValue("my-test-project");
+    await expect(page.getByTestId("project-name-input")).toHaveValue(
+      "my-test-project"
+    );
   });
 
   test("can close dialog with cancel button", async ({ page }) => {
@@ -57,7 +61,9 @@ test.describe("New Project Workflow", () => {
     await expect(page.getByTestId("new-project-dialog")).not.toBeVisible();
   });
 
-  test("create button enables when name and path are entered", async ({ page }) => {
+  test("create button enables when name and path are entered", async ({
+    page,
+  }) => {
     await page.goto("/");
 
     // Open dialog
@@ -100,7 +106,9 @@ test.describe("New Project Workflow", () => {
     await expect(page.getByTestId("board-view")).toBeVisible();
 
     // Project name should be displayed in the board view header
-    await expect(page.getByTestId("board-view").getByText("test-new-project")).toBeVisible();
+    await expect(
+      page.getByTestId("board-view").getByText("test-new-project")
+    ).toBeVisible();
 
     // Kanban columns should be visible
     await expect(page.getByText("Backlog")).toBeVisible();
@@ -108,7 +116,9 @@ test.describe("New Project Workflow", () => {
     await expect(page.getByText("Verified")).toBeVisible();
   });
 
-  test("created project appears in recent projects on welcome view", async ({ page }) => {
+  test("created project appears in recent projects on welcome view", async ({
+    page,
+  }) => {
     await page.goto("/");
 
     // Create a project
@@ -125,13 +135,21 @@ test.describe("New Project Workflow", () => {
     await page.goto("/");
 
     // The project should appear in recent projects section (use role to be specific)
-    await expect(page.getByRole("heading", { name: "Recent Projects" })).toBeVisible();
-    await expect(page.getByTestId("welcome-view").getByText("recent-project-test", { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Recent Projects" })
+    ).toBeVisible();
+    await expect(
+      page
+        .getByTestId("welcome-view")
+        .getByText("recent-project-test", { exact: true })
+    ).toBeVisible();
   });
 });
 
 test.describe("Open Project Workflow", () => {
-  test("clicking Open Project triggers directory selection", async ({ page }) => {
+  test("clicking Open Project triggers directory selection", async ({
+    page,
+  }) => {
     await page.goto("/");
 
     // In web mode, clicking Open Project card will show a prompt dialog
@@ -139,7 +157,9 @@ test.describe("Open Project Workflow", () => {
     await expect(page.getByTestId("open-project-card")).toBeVisible();
   });
 
-  test("opens existing project and navigates to board view", async ({ page }) => {
+  test("opens existing project and navigates to board view", async ({
+    page,
+  }) => {
     await page.goto("/");
 
     // Mock the window.prompt response
@@ -154,10 +174,14 @@ test.describe("Open Project Workflow", () => {
     await expect(page.getByTestId("board-view")).toBeVisible();
 
     // Project name should be derived from path
-    await expect(page.getByTestId("board-view").getByText("existing-project")).toBeVisible();
+    await expect(
+      page.getByTestId("board-view").getByText("existing-project")
+    ).toBeVisible();
   });
 
-  test("opened project loads into dashboard with features", async ({ page }) => {
+  test("opened project loads into dashboard with features", async ({
+    page,
+  }) => {
     await page.goto("/");
 
     // Mock the window.prompt response
@@ -171,9 +195,11 @@ test.describe("Open Project Workflow", () => {
     // Should show board view
     await expect(page.getByTestId("board-view")).toBeVisible();
 
-    // Should have loaded features from the mock feature_list.json
+    // Should have loaded features from the mock .automaker/feature_list.json
     // The mock returns "Sample Feature" in backlog
-    await expect(page.getByTestId("kanban-column-backlog").getByText("Sample Feature")).toBeVisible();
+    await expect(
+      page.getByTestId("kanban-column-backlog").getByText("Sample Feature")
+    ).toBeVisible();
   });
 
   test("can click on recent project to reopen it", async ({ page }) => {
@@ -192,14 +218,20 @@ test.describe("Open Project Workflow", () => {
     await page.goto("/");
 
     // Wait for recent projects to appear
-    await expect(page.getByRole("heading", { name: "Recent Projects" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Recent Projects" })
+    ).toBeVisible();
 
     // Click on the recent project
-    const recentProjectCard = page.getByText("reopenable-project", { exact: true }).first();
+    const recentProjectCard = page
+      .getByText("reopenable-project", { exact: true })
+      .first();
     await recentProjectCard.click();
 
     // Should navigate to board view with that project
     await expect(page.getByTestId("board-view")).toBeVisible();
-    await expect(page.getByTestId("board-view").getByText("reopenable-project")).toBeVisible();
+    await expect(
+      page.getByTestId("board-view").getByText("reopenable-project")
+    ).toBeVisible();
   });
 });

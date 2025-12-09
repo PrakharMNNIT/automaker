@@ -25,6 +25,26 @@ import {
 import { cn } from "@/lib/utils";
 import type { SessionListItem } from "@/types/electron";
 
+// Random session name generator
+const adjectives = [
+  "Swift", "Bright", "Clever", "Dynamic", "Eager", "Focused", "Gentle", "Happy",
+  "Inventive", "Jolly", "Keen", "Lively", "Mighty", "Noble", "Optimal", "Peaceful",
+  "Quick", "Radiant", "Smart", "Tranquil", "Unique", "Vibrant", "Wise", "Zealous"
+];
+
+const nouns = [
+  "Agent", "Builder", "Coder", "Developer", "Explorer", "Forge", "Garden", "Helper",
+  "Innovator", "Journey", "Kernel", "Lighthouse", "Mission", "Navigator", "Oracle",
+  "Project", "Quest", "Runner", "Spark", "Task", "Unicorn", "Voyage", "Workshop"
+];
+
+function generateRandomSessionName(): string {
+  const adjective = adjectives[Math.floor(Math.random() * adjectives.length)];
+  const noun = nouns[Math.floor(Math.random() * nouns.length)];
+  const number = Math.floor(Math.random() * 100);
+  return `${adjective} ${noun} ${number}`;
+}
+
 interface SessionManagerProps {
   currentSessionId: string | null;
   onSelectSession: (sessionId: string) => void;
@@ -60,12 +80,14 @@ export function SessionManager({
     loadSessions();
   }, []);
 
-  // Create new session
+  // Create new session with random name
   const handleCreateSession = async () => {
-    if (!newSessionName.trim() || !window.electronAPI?.sessions) return;
+    if (!window.electronAPI?.sessions) return;
+
+    const sessionName = newSessionName.trim() || generateRandomSessionName();
 
     const result = await window.electronAPI.sessions.create(
-      newSessionName,
+      sessionName,
       projectPath,
       projectPath
     );
@@ -73,6 +95,24 @@ export function SessionManager({
     if (result.success && result.sessionId) {
       setNewSessionName("");
       setIsCreating(false);
+      await loadSessions();
+      onSelectSession(result.sessionId);
+    }
+  };
+
+  // Create new session directly with a random name (one-click)
+  const handleQuickCreateSession = async () => {
+    if (!window.electronAPI?.sessions) return;
+
+    const sessionName = generateRandomSessionName();
+
+    const result = await window.electronAPI.sessions.create(
+      sessionName,
+      projectPath,
+      projectPath
+    );
+
+    if (result.success && result.sessionId) {
       await loadSessions();
       onSelectSession(result.sessionId);
     }
@@ -146,7 +186,8 @@ export function SessionManager({
             <Button
               variant="default"
               size="sm"
-              onClick={() => setIsCreating(true)}
+              onClick={handleQuickCreateSession}
+              data-testid="new-session-button"
             >
               <Plus className="w-4 h-4 mr-1" />
               New
@@ -172,7 +213,7 @@ export function SessionManager({
         </Tabs>
       </CardHeader>
 
-      <CardContent className="flex-1 overflow-y-auto space-y-2">
+      <CardContent className="flex-1 overflow-y-auto space-y-2" data-testid="session-list">
         {/* Create new session */}
         {isCreating && (
           <div className="p-3 border rounded-lg bg-muted/50">
@@ -217,6 +258,7 @@ export function SessionManager({
               session.isArchived && "opacity-60"
             )}
             onClick={() => !session.isArchived && onSelectSession(session.id)}
+            data-testid={`session-item-${session.id}`}
           >
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1 min-w-0">

@@ -62,7 +62,8 @@ const INTERVIEW_QUESTIONS = [
 ];
 
 export function InterviewView() {
-  const { setCurrentView, addProject, setCurrentProject, setAppSpec } = useAppStore();
+  const { setCurrentView, addProject, setCurrentProject, setAppSpec } =
+    useAppStore();
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<InterviewMessage[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -130,11 +131,19 @@ export function InterviewView() {
     if (currentQuestion) {
       setInterviewData((prev) => {
         const newData = { ...prev };
-        if (currentQuestion.field === "techStack" || currentQuestion.field === "features") {
+        if (
+          currentQuestion.field === "techStack" ||
+          currentQuestion.field === "features"
+        ) {
           // Parse comma-separated values into array
-          newData[currentQuestion.field] = input.split(",").map((s) => s.trim()).filter(Boolean);
+          newData[currentQuestion.field] = input
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
         } else {
-          (newData as Record<string, string | string[]>)[currentQuestion.field] = input;
+          (newData as Record<string, string | string[]>)[
+            currentQuestion.field
+          ] = input;
         }
         return newData;
       });
@@ -161,16 +170,33 @@ export function InterviewView() {
         const summaryMessage: InterviewMessage = {
           id: `assistant-summary-${Date.now()}`,
           role: "assistant",
-          content: "Perfect! I have all the information I need. Now let me generate your project specification...",
+          content:
+            "Perfect! I have all the information I need. Now let me generate your project specification...",
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, summaryMessage]);
         generateSpec({
           ...interviewData,
-          projectDescription: currentQuestionIndex === 0 ? input : interviewData.projectDescription,
-          techStack: currentQuestionIndex === 1 ? input.split(",").map(s => s.trim()).filter(Boolean) : interviewData.techStack,
-          features: currentQuestionIndex === 2 ? input.split(",").map(s => s.trim()).filter(Boolean) : interviewData.features,
-          additionalNotes: currentQuestionIndex === 3 ? input : interviewData.additionalNotes,
+          projectDescription:
+            currentQuestionIndex === 0
+              ? input
+              : interviewData.projectDescription,
+          techStack:
+            currentQuestionIndex === 1
+              ? input
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean)
+              : interviewData.techStack,
+          features:
+            currentQuestionIndex === 2
+              ? input
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean)
+              : interviewData.features,
+          additionalNotes:
+            currentQuestionIndex === 3 ? input : interviewData.additionalNotes,
         });
       }
     }, 500);
@@ -215,11 +241,23 @@ export function InterviewView() {
   </overview>
 
   <technology_stack>
-    ${data.techStack.length > 0 ? data.techStack.map((tech) => `<technology>${tech}</technology>`).join("\n    ") : "<!-- Define your tech stack -->"}
+    ${
+      data.techStack.length > 0
+        ? data.techStack
+            .map((tech) => `<technology>${tech}</technology>`)
+            .join("\n    ")
+        : "<!-- Define your tech stack -->"
+    }
   </technology_stack>
 
   <core_capabilities>
-    ${data.features.length > 0 ? data.features.map((feature) => `<capability>${feature}</capability>`).join("\n    ") : "<!-- List core features -->"}
+    ${
+      data.features.length > 0
+        ? data.features
+            .map((feature) => `<capability>${feature}</capability>`)
+            .join("\n    ")
+        : "<!-- List core features -->"
+    }
   </core_capabilities>
 
   <additional_requirements>
@@ -259,7 +297,7 @@ export function InterviewView() {
       // Write app_spec.txt with generated content
       await api.writeFile(`${fullProjectPath}/app_spec.txt`, generatedSpec);
 
-      // Create initial feature_list.json
+      // Create initial .automaker/feature_list.json
       await api.writeFile(
         `${fullProjectPath}/feature_list.json`,
         JSON.stringify(
@@ -267,7 +305,11 @@ export function InterviewView() {
             {
               category: "Core",
               description: "Initial project setup",
-              steps: ["Step 1: Review app_spec.txt", "Step 2: Set up development environment", "Step 3: Start implementing features"],
+              steps: [
+                "Step 1: Review app_spec.txt",
+                "Step 2: Set up development environment",
+                "Step 3: Start implementing features",
+              ],
               passes: false,
             },
           ],
@@ -307,7 +349,10 @@ export function InterviewView() {
   };
 
   return (
-    <div className="flex-1 flex flex-col content-bg" data-testid="interview-view">
+    <div
+      className="flex-1 flex flex-col content-bg"
+      data-testid="interview-view"
+    >
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-white/10 bg-zinc-950/50 backdrop-blur-md">
         <div className="flex items-center gap-3">
@@ -324,7 +369,11 @@ export function InterviewView() {
           <div>
             <h1 className="text-xl font-bold">New Project Interview</h1>
             <p className="text-sm text-muted-foreground">
-              {isComplete ? "Specification generated!" : `Question ${currentQuestionIndex + 1} of ${INTERVIEW_QUESTIONS.length}`}
+              {isComplete
+                ? "Specification generated!"
+                : `Question ${currentQuestionIndex + 1} of ${
+                    INTERVIEW_QUESTIONS.length
+                  }`}
             </p>
           </div>
         </div>
@@ -344,7 +393,9 @@ export function InterviewView() {
               )}
             />
           ))}
-          {isComplete && <CheckCircle className="w-4 h-4 text-green-500 ml-2" />}
+          {isComplete && (
+            <CheckCircle className="w-4 h-4 text-green-500 ml-2" />
+          )}
         </div>
       </div>
 
@@ -418,7 +469,10 @@ export function InterviewView() {
         {/* Project Setup Form */}
         {showProjectSetup && (
           <div className="mt-6">
-            <Card className="bg-zinc-900/50 border-white/10" data-testid="project-setup-form">
+            <Card
+              className="bg-zinc-900/50 border-white/10"
+              data-testid="project-setup-form"
+            >
               <CardContent className="p-6 space-y-4">
                 <div className="flex items-center gap-2 mb-4">
                   <FileText className="w-5 h-5 text-primary" />
@@ -427,7 +481,10 @@ export function InterviewView() {
 
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <label htmlFor="project-name" className="text-sm font-medium text-zinc-300">
+                    <label
+                      htmlFor="project-name"
+                      className="text-sm font-medium text-zinc-300"
+                    >
                       Project Name
                     </label>
                     <Input
@@ -441,7 +498,10 @@ export function InterviewView() {
                   </div>
 
                   <div className="space-y-2">
-                    <label htmlFor="project-path" className="text-sm font-medium text-zinc-300">
+                    <label
+                      htmlFor="project-path"
+                      className="text-sm font-medium text-zinc-300"
+                    >
                       Parent Directory
                     </label>
                     <div className="flex gap-2">

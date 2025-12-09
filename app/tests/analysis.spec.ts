@@ -1,7 +1,9 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("Project Analysis", () => {
-  test("can navigate to analysis view when project is open", async ({ page }) => {
+  test("can navigate to analysis view when project is open", async ({
+    page,
+  }) => {
     await page.goto("/");
 
     // Create a project first using dropdown
@@ -22,7 +24,9 @@ test.describe("Project Analysis", () => {
     await expect(page.getByTestId("analysis-view")).toBeVisible();
   });
 
-  test("analysis view shows 'No Analysis Yet' message initially", async ({ page }) => {
+  test("analysis view shows 'No Analysis Yet' message initially", async ({
+    page,
+  }) => {
     await page.goto("/");
 
     // Create a project first using dropdown
@@ -30,7 +34,9 @@ test.describe("Project Analysis", () => {
     await page.getByTestId("quick-setup-option").click();
     await expect(page.getByTestId("new-project-dialog")).toBeVisible();
     await page.getByTestId("project-name-input").fill("Analysis Test Project2");
-    await page.getByTestId("project-path-input").fill("/test/analysis/project2");
+    await page
+      .getByTestId("project-path-input")
+      .fill("/test/analysis/project2");
     await page.getByTestId("confirm-create-project").click();
     await expect(page.getByTestId("board-view")).toBeVisible();
 
@@ -51,7 +57,9 @@ test.describe("Project Analysis", () => {
     await page.getByTestId("quick-setup-option").click();
     await expect(page.getByTestId("new-project-dialog")).toBeVisible();
     await page.getByTestId("project-name-input").fill("Analysis Test Project3");
-    await page.getByTestId("project-path-input").fill("/test/analysis/project3");
+    await page
+      .getByTestId("project-path-input")
+      .fill("/test/analysis/project3");
     await page.getByTestId("confirm-create-project").click();
     await expect(page.getByTestId("board-view")).toBeVisible();
 
@@ -71,7 +79,9 @@ test.describe("Project Analysis", () => {
     await page.getByTestId("quick-setup-option").click();
     await expect(page.getByTestId("new-project-dialog")).toBeVisible();
     await page.getByTestId("project-name-input").fill("Analysis Test Project4");
-    await page.getByTestId("project-path-input").fill("/test/analysis/project4");
+    await page
+      .getByTestId("project-path-input")
+      .fill("/test/analysis/project4");
     await page.getByTestId("confirm-create-project").click();
     await expect(page.getByTestId("board-view")).toBeVisible();
 
@@ -98,7 +108,9 @@ test.describe("Project Analysis", () => {
     await page.getByTestId("quick-setup-option").click();
     await expect(page.getByTestId("new-project-dialog")).toBeVisible();
     await page.getByTestId("project-name-input").fill("Analysis Test Project5");
-    await page.getByTestId("project-path-input").fill("/test/analysis/project5");
+    await page
+      .getByTestId("project-path-input")
+      .fill("/test/analysis/project5");
     await page.getByTestId("confirm-create-project").click();
     await expect(page.getByTestId("board-view")).toBeVisible();
 
@@ -124,7 +136,9 @@ test.describe("Project Analysis", () => {
     await page.getByTestId("quick-setup-option").click();
     await expect(page.getByTestId("new-project-dialog")).toBeVisible();
     await page.getByTestId("project-name-input").fill("Analysis Test Project6");
-    await page.getByTestId("project-path-input").fill("/test/analysis/project6");
+    await page
+      .getByTestId("project-path-input")
+      .fill("/test/analysis/project6");
     await page.getByTestId("confirm-create-project").click();
     await expect(page.getByTestId("board-view")).toBeVisible();
 
@@ -142,7 +156,9 @@ test.describe("Project Analysis", () => {
     await expect(page.getByTestId("files-by-extension")).toBeVisible();
   });
 
-  test("file tree displays correct structure with directories and files", async ({ page }) => {
+  test("file tree displays correct structure with directories and files", async ({
+    page,
+  }) => {
     await page.goto("/");
 
     // Create a project first using dropdown
@@ -150,7 +166,9 @@ test.describe("Project Analysis", () => {
     await page.getByTestId("quick-setup-option").click();
     await expect(page.getByTestId("new-project-dialog")).toBeVisible();
     await page.getByTestId("project-name-input").fill("Analysis Test Project7");
-    await page.getByTestId("project-path-input").fill("/test/analysis/project7");
+    await page
+      .getByTestId("project-path-input")
+      .fill("/test/analysis/project7");
     await page.getByTestId("confirm-create-project").click();
     await expect(page.getByTestId("board-view")).toBeVisible();
 
@@ -173,7 +191,9 @@ test.describe("Project Analysis", () => {
 });
 
 test.describe("Generate Spec from Code", () => {
-  test("shows Generate Spec card after analysis is complete", async ({ page }) => {
+  test("shows Generate Spec card after analysis is complete", async ({
+    page,
+  }) => {
     await page.goto("/");
 
     // Step 1: Open project with code but no spec
@@ -181,8 +201,12 @@ test.describe("Generate Spec from Code", () => {
     await page.getByTestId("create-new-project").click();
     await page.getByTestId("quick-setup-option").click();
     await expect(page.getByTestId("new-project-dialog")).toBeVisible();
-    await page.getByTestId("project-name-input").fill("Generate Spec Test Project");
-    await page.getByTestId("project-path-input").fill("/test/generate-spec/project");
+    await page
+      .getByTestId("project-name-input")
+      .fill("Generate Spec Test Project");
+    await page
+      .getByTestId("project-path-input")
+      .fill("/test/generate-spec/project");
     await page.getByTestId("confirm-create-project").click();
     await expect(page.getByTestId("board-view")).toBeVisible();
 
@@ -205,8 +229,12 @@ test.describe("Generate Spec from Code", () => {
     await page.getByTestId("create-new-project").click();
     await page.getByTestId("quick-setup-option").click();
     await expect(page.getByTestId("new-project-dialog")).toBeVisible();
-    await page.getByTestId("project-name-input").fill("Generate Spec Test Project2");
-    await page.getByTestId("project-path-input").fill("/test/generate-spec/project2");
+    await page
+      .getByTestId("project-name-input")
+      .fill("Generate Spec Test Project2");
+    await page
+      .getByTestId("project-path-input")
+      .fill("/test/generate-spec/project2");
     await page.getByTestId("confirm-create-project").click();
     await expect(page.getByTestId("board-view")).toBeVisible();
 
@@ -220,18 +248,26 @@ test.describe("Generate Spec from Code", () => {
 
     // Step 2: Trigger 'Generate Spec' - verify button exists
     await expect(page.getByTestId("generate-spec-button")).toBeVisible();
-    await expect(page.getByTestId("generate-spec-button")).toHaveText(/Generate Spec/);
+    await expect(page.getByTestId("generate-spec-button")).toHaveText(
+      /Generate Spec/
+    );
   });
 
-  test("can trigger Generate Spec and shows success message", async ({ page }) => {
+  test("can trigger Generate Spec and shows success message", async ({
+    page,
+  }) => {
     await page.goto("/");
 
     // Step 1: Open project with code but no spec
     await page.getByTestId("create-new-project").click();
     await page.getByTestId("quick-setup-option").click();
     await expect(page.getByTestId("new-project-dialog")).toBeVisible();
-    await page.getByTestId("project-name-input").fill("Generate Spec Test Project3");
-    await page.getByTestId("project-path-input").fill("/test/generate-spec/project3");
+    await page
+      .getByTestId("project-name-input")
+      .fill("Generate Spec Test Project3");
+    await page
+      .getByTestId("project-path-input")
+      .fill("/test/generate-spec/project3");
     await page.getByTestId("confirm-create-project").click();
     await expect(page.getByTestId("board-view")).toBeVisible();
 
@@ -248,7 +284,9 @@ test.describe("Generate Spec from Code", () => {
 
     // Step 3: Verify app_spec.txt is created (success message appears)
     await expect(page.getByTestId("spec-generated-success")).toBeVisible();
-    await expect(page.getByText("app_spec.txt created successfully")).toBeVisible();
+    await expect(
+      page.getByText("app_spec.txt created successfully")
+    ).toBeVisible();
   });
 
   test("Generate Spec card displays description", async ({ page }) => {
@@ -258,8 +296,12 @@ test.describe("Generate Spec from Code", () => {
     await page.getByTestId("create-new-project").click();
     await page.getByTestId("quick-setup-option").click();
     await expect(page.getByTestId("new-project-dialog")).toBeVisible();
-    await page.getByTestId("project-name-input").fill("Generate Spec Test Project4");
-    await page.getByTestId("project-path-input").fill("/test/generate-spec/project4");
+    await page
+      .getByTestId("project-name-input")
+      .fill("Generate Spec Test Project4");
+    await page
+      .getByTestId("project-path-input")
+      .fill("/test/generate-spec/project4");
     await page.getByTestId("confirm-create-project").click();
     await expect(page.getByTestId("board-view")).toBeVisible();
 
@@ -270,19 +312,29 @@ test.describe("Generate Spec from Code", () => {
 
     // Step 4: Verify spec content accurately reflects codebase
     // Check that the card shows relevant information about what the spec generation does
-    await expect(page.getByText("Create app_spec.txt from analysis")).toBeVisible();
-    await expect(page.getByText(/Generate a project specification/)).toBeVisible();
+    await expect(
+      page.getByText("Create app_spec.txt from analysis")
+    ).toBeVisible();
+    await expect(
+      page.getByText(/Generate a project specification/)
+    ).toBeVisible();
   });
 
-  test("Generate Spec button is disabled while generating", async ({ page }) => {
+  test("Generate Spec button is disabled while generating", async ({
+    page,
+  }) => {
     await page.goto("/");
 
     // Create a project
     await page.getByTestId("create-new-project").click();
     await page.getByTestId("quick-setup-option").click();
     await expect(page.getByTestId("new-project-dialog")).toBeVisible();
-    await page.getByTestId("project-name-input").fill("Generate Spec Test Project5");
-    await page.getByTestId("project-path-input").fill("/test/generate-spec/project5");
+    await page
+      .getByTestId("project-name-input")
+      .fill("Generate Spec Test Project5");
+    await page
+      .getByTestId("project-path-input")
+      .fill("/test/generate-spec/project5");
     await page.getByTestId("confirm-create-project").click();
     await expect(page.getByTestId("board-view")).toBeVisible();
 
@@ -297,7 +349,9 @@ test.describe("Generate Spec from Code", () => {
     await expect(generateButton).toBeEnabled();
   });
 
-  test("generated spec file reflects analyzed codebase structure", async ({ page }) => {
+  test("generated spec file reflects analyzed codebase structure", async ({
+    page,
+  }) => {
     await page.goto("/");
 
     // Step 1: Open project with code but no spec
@@ -305,7 +359,9 @@ test.describe("Generate Spec from Code", () => {
     await page.getByTestId("quick-setup-option").click();
     await expect(page.getByTestId("new-project-dialog")).toBeVisible();
     await page.getByTestId("project-name-input").fill("Spec Verify Project");
-    await page.getByTestId("project-path-input").fill("/test/spec-verify/project");
+    await page
+      .getByTestId("project-path-input")
+      .fill("/test/spec-verify/project");
     await page.getByTestId("confirm-create-project").click();
     await expect(page.getByTestId("board-view")).toBeVisible();
 
@@ -352,15 +408,21 @@ test.describe("Generate Spec from Code", () => {
 });
 
 test.describe("Generate Feature List from Code", () => {
-  test("shows Generate Feature List card after analysis is complete", async ({ page }) => {
+  test("shows Generate Feature List card after analysis is complete", async ({
+    page,
+  }) => {
     await page.goto("/");
 
     // Step 1: Open project with implemented features
     await page.getByTestId("create-new-project").click();
     await page.getByTestId("quick-setup-option").click();
     await expect(page.getByTestId("new-project-dialog")).toBeVisible();
-    await page.getByTestId("project-name-input").fill("Feature List Test Project");
-    await page.getByTestId("project-path-input").fill("/test/feature-list/project");
+    await page
+      .getByTestId("project-name-input")
+      .fill("Feature List Test Project");
+    await page
+      .getByTestId("project-path-input")
+      .fill("/test/feature-list/project");
     await page.getByTestId("confirm-create-project").click();
     await expect(page.getByTestId("board-view")).toBeVisible();
 
@@ -376,15 +438,21 @@ test.describe("Generate Feature List from Code", () => {
     await expect(page.getByTestId("generate-feature-list-card")).toBeVisible();
   });
 
-  test("shows Generate Feature List button after analysis", async ({ page }) => {
+  test("shows Generate Feature List button after analysis", async ({
+    page,
+  }) => {
     await page.goto("/");
 
     // Create a project
     await page.getByTestId("create-new-project").click();
     await page.getByTestId("quick-setup-option").click();
     await expect(page.getByTestId("new-project-dialog")).toBeVisible();
-    await page.getByTestId("project-name-input").fill("Feature List Test Project2");
-    await page.getByTestId("project-path-input").fill("/test/feature-list/project2");
+    await page
+      .getByTestId("project-name-input")
+      .fill("Feature List Test Project2");
+    await page
+      .getByTestId("project-path-input")
+      .fill("/test/feature-list/project2");
     await page.getByTestId("confirm-create-project").click();
     await expect(page.getByTestId("board-view")).toBeVisible();
 
@@ -397,19 +465,29 @@ test.describe("Generate Feature List from Code", () => {
     await expect(page.getByTestId("analysis-stats")).toBeVisible();
 
     // Step 2: Trigger 'Generate Feature List' - verify button exists
-    await expect(page.getByTestId("generate-feature-list-button")).toBeVisible();
-    await expect(page.getByTestId("generate-feature-list-button")).toHaveText(/Generate Feature List/);
+    await expect(
+      page.getByTestId("generate-feature-list-button")
+    ).toBeVisible();
+    await expect(page.getByTestId("generate-feature-list-button")).toHaveText(
+      /Generate Feature List/
+    );
   });
 
-  test("can trigger Generate Feature List and shows success message", async ({ page }) => {
+  test("can trigger Generate Feature List and shows success message", async ({
+    page,
+  }) => {
     await page.goto("/");
 
     // Step 1: Open project with implemented features
     await page.getByTestId("create-new-project").click();
     await page.getByTestId("quick-setup-option").click();
     await expect(page.getByTestId("new-project-dialog")).toBeVisible();
-    await page.getByTestId("project-name-input").fill("Feature List Test Project3");
-    await page.getByTestId("project-path-input").fill("/test/feature-list/project3");
+    await page
+      .getByTestId("project-name-input")
+      .fill("Feature List Test Project3");
+    await page
+      .getByTestId("project-path-input")
+      .fill("/test/feature-list/project3");
     await page.getByTestId("confirm-create-project").click();
     await expect(page.getByTestId("board-view")).toBeVisible();
 
@@ -424,9 +502,13 @@ test.describe("Generate Feature List from Code", () => {
     // Step 2: Trigger 'Generate Feature List'
     await page.getByTestId("generate-feature-list-button").click();
 
-    // Step 3: Verify feature_list.json is created (success message appears)
-    await expect(page.getByTestId("feature-list-generated-success")).toBeVisible();
-    await expect(page.getByText("feature_list.json created successfully")).toBeVisible();
+    // Step 3: Verify .automaker/feature_list.json is created (success message appears)
+    await expect(
+      page.getByTestId("feature-list-generated-success")
+    ).toBeVisible();
+    await expect(
+      page.getByText("feature_list.json created successfully")
+    ).toBeVisible();
   });
 
   test("Generate Feature List card displays description", async ({ page }) => {
@@ -436,8 +518,12 @@ test.describe("Generate Feature List from Code", () => {
     await page.getByTestId("create-new-project").click();
     await page.getByTestId("quick-setup-option").click();
     await expect(page.getByTestId("new-project-dialog")).toBeVisible();
-    await page.getByTestId("project-name-input").fill("Feature List Test Project4");
-    await page.getByTestId("project-path-input").fill("/test/feature-list/project4");
+    await page
+      .getByTestId("project-name-input")
+      .fill("Feature List Test Project4");
+    await page
+      .getByTestId("project-path-input")
+      .fill("/test/feature-list/project4");
     await page.getByTestId("confirm-create-project").click();
     await expect(page.getByTestId("board-view")).toBeVisible();
 
@@ -447,19 +533,29 @@ test.describe("Generate Feature List from Code", () => {
     await expect(page.getByTestId("generate-feature-list-card")).toBeVisible();
 
     // Check that the card shows relevant information about what the feature list generation does
-    await expect(page.getByText("Create feature_list.json from analysis")).toBeVisible();
-    await expect(page.getByText(/Automatically detect and generate a feature list/)).toBeVisible();
+    await expect(
+      page.getByText("Create .automaker/feature_list.json from analysis")
+    ).toBeVisible();
+    await expect(
+      page.getByText(/Automatically detect and generate a feature list/)
+    ).toBeVisible();
   });
 
-  test("Generate Feature List button is enabled after analysis", async ({ page }) => {
+  test("Generate Feature List button is enabled after analysis", async ({
+    page,
+  }) => {
     await page.goto("/");
 
     // Create a project
     await page.getByTestId("create-new-project").click();
     await page.getByTestId("quick-setup-option").click();
     await expect(page.getByTestId("new-project-dialog")).toBeVisible();
-    await page.getByTestId("project-name-input").fill("Feature List Test Project5");
-    await page.getByTestId("project-path-input").fill("/test/feature-list/project5");
+    await page
+      .getByTestId("project-name-input")
+      .fill("Feature List Test Project5");
+    await page
+      .getByTestId("project-path-input")
+      .fill("/test/feature-list/project5");
     await page.getByTestId("confirm-create-project").click();
     await expect(page.getByTestId("board-view")).toBeVisible();
 
@@ -474,7 +570,9 @@ test.describe("Generate Feature List from Code", () => {
     await expect(generateButton).toBeEnabled();
   });
 
-  test("generated feature list contains features with passes: true", async ({ page }) => {
+  test("generated feature list contains features with passes: true", async ({
+    page,
+  }) => {
     await page.goto("/");
 
     // Step 1: Open project with implemented features
@@ -482,7 +580,9 @@ test.describe("Generate Feature List from Code", () => {
     await page.getByTestId("quick-setup-option").click();
     await expect(page.getByTestId("new-project-dialog")).toBeVisible();
     await page.getByTestId("project-name-input").fill("Feature Verify Project");
-    await page.getByTestId("project-path-input").fill("/test/feature-verify/project");
+    await page
+      .getByTestId("project-path-input")
+      .fill("/test/feature-verify/project");
     await page.getByTestId("confirm-create-project").click();
     await expect(page.getByTestId("board-view")).toBeVisible();
 
@@ -504,8 +604,10 @@ test.describe("Generate Feature List from Code", () => {
     // Step 2: Trigger 'Generate Feature List'
     await page.getByTestId("generate-feature-list-button").click();
 
-    // Step 3: Verify feature_list.json is created (success message appears)
-    await expect(page.getByTestId("feature-list-generated-success")).toBeVisible();
+    // Step 3: Verify .automaker/feature_list.json is created (success message appears)
+    await expect(
+      page.getByTestId("feature-list-generated-success")
+    ).toBeVisible();
 
     // Step 4: Verify existing features are marked 'passes': true
     // Navigate to board view to verify the features are loaded
@@ -517,15 +619,21 @@ test.describe("Generate Feature List from Code", () => {
     // the generation completed successfully (the success message is sufficient proof)
   });
 
-  test("Generate Feature List can be triggered multiple times", async ({ page }) => {
+  test("Generate Feature List can be triggered multiple times", async ({
+    page,
+  }) => {
     await page.goto("/");
 
     // Create a project
     await page.getByTestId("create-new-project").click();
     await page.getByTestId("quick-setup-option").click();
     await expect(page.getByTestId("new-project-dialog")).toBeVisible();
-    await page.getByTestId("project-name-input").fill("Feature List Multi Test");
-    await page.getByTestId("project-path-input").fill("/test/feature-list/multi");
+    await page
+      .getByTestId("project-name-input")
+      .fill("Feature List Multi Test");
+    await page
+      .getByTestId("project-path-input")
+      .fill("/test/feature-list/multi");
     await page.getByTestId("confirm-create-project").click();
     await expect(page.getByTestId("board-view")).toBeVisible();
 
@@ -536,10 +644,14 @@ test.describe("Generate Feature List from Code", () => {
 
     // Generate feature list first time
     await page.getByTestId("generate-feature-list-button").click();
-    await expect(page.getByTestId("feature-list-generated-success")).toBeVisible();
+    await expect(
+      page.getByTestId("feature-list-generated-success")
+    ).toBeVisible();
 
     // Generate feature list second time (should overwrite)
     await page.getByTestId("generate-feature-list-button").click();
-    await expect(page.getByTestId("feature-list-generated-success")).toBeVisible();
+    await expect(
+      page.getByTestId("feature-list-generated-success")
+    ).toBeVisible();
   });
 });

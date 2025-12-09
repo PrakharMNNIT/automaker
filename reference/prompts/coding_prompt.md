@@ -18,7 +18,7 @@ ls -la
 cat app_spec.txt
 
 # 4. Read the feature list to see all work
-cat feature_list.json | head -50
+cat .automaker/feature_list.json | head -50
 
 # 5. Read progress notes from previous sessions
 cat claude-progress.txt
@@ -27,7 +27,7 @@ cat claude-progress.txt
 git log --oneline -20
 
 # 7. Count remaining tests
-cat feature_list.json | grep '"passes": false' | wc -l
+cat .automaker/feature_list.json | grep '"passes": false' | wc -l
 ```
 
 Understanding the `app_spec.txt` is critical - it contains the full requirements
@@ -63,7 +63,7 @@ If Playwright tests don't exist yet, create them in a `tests/` directory before 
 
 **If any tests fail:**
 
-- Mark that feature as "passes": false immediately in feature_list.json
+- Mark that feature as "passes": false immediately in .automaker/feature_list.json
 - Fix all failing tests BEFORE moving to new features
 - This includes UI bugs like:
   - White-on-white text or poor contrast
@@ -76,7 +76,7 @@ If Playwright tests don't exist yet, create them in a `tests/` directory before 
 
 ### STEP 4: CHOOSE ONE FEATURE TO IMPLEMENT
 
-Look at feature_list.json and find the highest-priority feature with "passes": false.
+Look at .automaker/feature_list.json and find the highest-priority feature with "passes": false.
 
 Focus on completing one feature perfectly and completing its testing steps in this session before moving on to other features.
 It's ok if you only complete one feature in this session, as there will be more sessions later that continue to make progress.
@@ -143,31 +143,48 @@ test("user can send a message and receive response", async ({ page }) => {
 - Mark tests passing without all Playwright tests green
 - Increase any playwright timeouts past 10s
 
-### STEP 7: UPDATE feature_list.json (CAREFULLY!)
+### STEP 7: UPDATE .automaker/feature_list.json AND DELETE TESTS
 
-**YOU CAN ONLY MODIFY ONE FIELD: "passes"**
+**YOU CAN ONLY MODIFY ONE FIELD: "status"**
 
-After thorough verification, change:
+After implementing a feature:
+
+1. Run all Playwright tests for that feature
+2. Verify all tests pass
+3. **If all tests pass:**
+   - Change status to `"verified"`
+   - **DELETE the test file(s) for this feature**
+4. **If any tests fail:** Keep status as `"in_progress"` and fix issues
+
+Status transitions:
 
 ```json
-"passes": false
+"status": "backlog"      → Start working on it → "status": "in_progress"
+"status": "in_progress"  → Tests pass → "status": "verified" + DELETE TESTS
+"status": "in_progress"  → Tests fail → Keep as "in_progress", fix issues
 ```
 
-to:
+**Test Deletion Policy:**
 
-```json
-"passes": true
+Tests are ONLY for verifying the feature you just built. Once verified:
+
+```bash
+# Delete the test file for this feature
+rm tests/[feature-name].spec.ts
 ```
+
+This prevents test accumulation and brittleness as the app changes rapidly.
 
 **NEVER:**
 
-- Remove tests
 - Edit test descriptions
 - Modify test steps
 - Combine or consolidate tests
 - Reorder tests
+- Mark as "verified" without tests passing
+- Keep tests after verification
 
-**ONLY CHANGE "passes" FIELD AFTER ALL PLAYWRIGHT TESTS PASS.**
+**CRITICAL: AFTER MARKING AS "verified", DELETE THE TEST FILE IMMEDIATELY.**
 
 ### STEP 8: COMMIT YOUR PROGRESS
 
@@ -175,12 +192,12 @@ Make a descriptive git commit:
 
 ```bash
 git add .
-git commit -m "Implement [feature name] - verified with Playwright tests
+git commit -m "Implement [feature name] - verified and cleaned up
 
 - Added [specific changes]
-- Added/updated Playwright tests in tests/
-- All tests passing
-- Updated feature_list.json: marked test #X as passing
+- Verified with Playwright tests (all passing)
+- Deleted test file(s) after verification
+- Updated .automaker/feature_list.json: marked feature #X as "verified"
 "
 git push origin main
 ```
@@ -201,7 +218,7 @@ Before context fills up:
 
 1. Commit all working code
 2. Update claude-progress.txt
-3. Update feature_list.json if tests verified
+3. Update .automaker/feature_list.json if tests verified
 4. Ensure no uncommitted changes
 5. Leave app in working state (no broken features)
 
