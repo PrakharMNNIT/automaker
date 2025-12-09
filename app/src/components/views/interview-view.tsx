@@ -295,11 +295,14 @@ export function InterviewView() {
       await api.mkdir(fullProjectPath);
 
       // Write app_spec.txt with generated content
-      await api.writeFile(`${fullProjectPath}/app_spec.txt`, generatedSpec);
+      await api.writeFile(
+        `${fullProjectPath}/.automaker/app_spec.txt`,
+        generatedSpec
+      );
 
       // Create initial .automaker/feature_list.json
       await api.writeFile(
-        `${fullProjectPath}/feature_list.json`,
+        `${fullProjectPath}/.automaker/feature_list.json`,
         JSON.stringify(
           [
             {

@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Feature } from "@/store/app-store";
-import { GripVertical, Edit, CheckCircle2, Circle, Loader2, Trash2, Eye, PlayCircle } from "lucide-react";
+import { GripVertical, Edit, CheckCircle2, Circle, Loader2, Trash2, Eye, PlayCircle, RotateCcw } from "lucide-react";
 
 interface KanbanCardProps {
   feature: Feature;
@@ -20,10 +20,12 @@ interface KanbanCardProps {
   onDelete: () => void;
   onViewOutput?: () => void;
   onVerify?: () => void;
+  onResume?: () => void;
+  hasContext?: boolean;
   isCurrentAutoTask?: boolean;
 }
 
-export function KanbanCard({ feature, onEdit, onDelete, onViewOutput, onVerify, isCurrentAutoTask }: KanbanCardProps) {
+export function KanbanCard({ feature, onEdit, onDelete, onViewOutput, onVerify, onResume, hasContext, isCurrentAutoTask }: KanbanCardProps) {
   // Disable dragging if the feature is in progress or verified
   const isDraggable = feature.status === "backlog";
   const {
@@ -127,7 +129,21 @@ export function KanbanCard({ feature, onEdit, onDelete, onViewOutput, onVerify, 
           )}
           {!isCurrentAutoTask && feature.status === "in_progress" && (
             <>
-              {onVerify && (
+              {hasContext && onResume ? (
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="flex-1 h-7 text-xs bg-blue-600 hover:bg-blue-700"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onResume();
+                  }}
+                  data-testid={`resume-feature-${feature.id}`}
+                >
+                  <RotateCcw className="w-3 h-3 mr-1" />
+                  Resume
+                </Button>
+              ) : onVerify ? (
                 <Button
                   variant="default"
                   size="sm"
@@ -139,9 +155,9 @@ export function KanbanCard({ feature, onEdit, onDelete, onViewOutput, onVerify, 
                   data-testid={`verify-feature-${feature.id}`}
                 >
                   <PlayCircle className="w-3 h-3 mr-1" />
-                  Verify
+                  Implement
                 </Button>
-              )}
+              ) : null}
               {onViewOutput && (
                 <Button
                   variant="ghost"

@@ -434,3 +434,40 @@ ipcMain.handle("auto-mode:verify-feature", async (_, { projectPath, featureId })
     return { success: false, error: error.message };
   }
 });
+
+/**
+ * Resume a specific feature with previous context
+ */
+ipcMain.handle("auto-mode:resume-feature", async (_, { projectPath, featureId }) => {
+  console.log("[IPC] auto-mode:resume-feature called with:", { projectPath, featureId });
+  try {
+    const sendToRenderer = (data) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("auto-mode:event", data);
+      }
+    };
+
+    return await autoModeService.resumeFeature({ projectPath, featureId, sendToRenderer });
+  } catch (error) {
+    console.error("[IPC] auto-mode:resume-feature error:", error);
+    return { success: false, error: error.message };
+  }
+});
+
+/**
+ * Check if a context file exists for a feature
+ */
+ipcMain.handle("auto-mode:context-exists", async (_, { projectPath, featureId }) => {
+  try {
+    const contextPath = path.join(projectPath, ".automaker", "context", `${featureId}.md`);
+    try {
+      await fs.access(contextPath);
+      return { success: true, exists: true };
+    } catch {
+      return { success: true, exists: false };
+    }
+  } catch (error) {
+    console.error("[IPC] auto-mode:context-exists error:", error);
+    return { success: false, error: error.message };
+  }
+});

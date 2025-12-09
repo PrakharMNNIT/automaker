@@ -79,6 +79,7 @@ export function BoardView() {
   const [showActivityLog, setShowActivityLog] = useState(false);
   const [showOutputModal, setShowOutputModal] = useState(false);
   const [outputFeature, setOutputFeature] = useState<Feature | null>(null);
+  const [featuresWithContext, setFeaturesWithContext] = useState<Set<string>>(new Set());
 
   // Make current project available globally for modal
   useEffect(() => {
@@ -184,6 +185,32 @@ export function BoardView() {
   useEffect(() => {
     loadFeatures();
   }, [loadFeatures]);
+
+  // Check which features have context files
+  useEffect(() => {
+    const checkAllContexts = async () => {
+      const inProgressFeatures = features.filter((f) => f.status === "in_progress");
+      const contextChecks = await Promise.all(
+        inProgressFeatures.map(async (f) => ({
+          id: f.id,
+          hasContext: await checkContextExists(f.id),
+        }))
+      );
+
+      const newSet = new Set<string>();
+      contextChecks.forEach(({ id, hasContext }) => {
+        if (hasContext) {
+          newSet.add(id);
+        }
+      });
+
+      setFeaturesWithContext(newSet);
+    };
+
+    if (features.length > 0 && !isLoading) {
+      checkAllContexts();
+    }
+  }, [features, isLoading]);
 
   // Save features to file
   const saveFeatures = useCallback(async () => {
@@ -360,6 +387,59 @@ export function BoardView() {
     }
   };
 
+  const handleResumeFeature = async (feature: Feature) => {
+    if (!currentProject) return;
+
+    console.log("[Board] Resuming feature:", { id: feature.id, description: feature.description });
+
+    try {
+      const api = getElectronAPI();
+      if (!api?.autoMode) {
+        console.error("Auto mode API not available");
+        return;
+      }
+
+      // Call the API to resume this specific feature by ID with context
+      const result = await api.autoMode.resumeFeature(
+        currentProject.path,
+        feature.id
+      );
+
+      if (result.success) {
+        console.log("[Board] Feature resume started successfully");
+        // The feature status will be updated by the auto mode service
+        // and the UI will reload features when resume completes
+      } else {
+        console.error("[Board] Failed to resume feature:", result.error);
+        await loadFeatures();
+      }
+    } catch (error) {
+      console.error("[Board] Error resuming feature:", error);
+      await loadFeatures();
+    }
+  };
+
+  const checkContextExists = async (featureId: string): Promise<boolean> => {
+    if (!currentProject) return false;
+
+    try {
+      const api = getElectronAPI();
+      if (!api?.autoMode?.contextExists) {
+        return false;
+      }
+
+      const result = await api.autoMode.contextExists(
+        currentProject.path,
+        featureId
+      );
+
+      return result.success && result.exists === true;
+    } catch (error) {
+      console.error("[Board] Error checking context:", error);
+      return false;
+    }
+  };
+
   const getColumnFeatures = (columnId: ColumnId) => {
     return features.filter((f) => f.status === columnId);
   };
@@ -504,6 +584,8 @@ export function BoardView() {
                         onDelete={() => handleDeleteFeature(feature.id)}
                         onViewOutput={() => handleViewOutput(feature)}
                         onVerify={() => handleVerifyFeature(feature)}
+                        onResume={() => handleResumeFeature(feature)}
+                        hasContext={featuresWithContext.has(feature.id)}
                         isCurrentAutoTask={runningAutoTasks.includes(feature.id)}
                       />
                     ))}

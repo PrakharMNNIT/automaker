@@ -11,16 +11,20 @@ export function useAutoMode() {
   const {
     isAutoModeRunning,
     setAutoModeRunning,
-    currentAutoTask,
-    setCurrentAutoTask,
+    runningAutoTasks,
+    addRunningTask,
+    removeRunningTask,
+    clearRunningTasks,
     currentProject,
     addAutoModeActivity,
   } = useAppStore(
     useShallow((state) => ({
       isAutoModeRunning: state.isAutoModeRunning,
       setAutoModeRunning: state.setAutoModeRunning,
-      currentAutoTask: state.currentAutoTask,
-      setCurrentAutoTask: state.setCurrentAutoTask,
+      runningAutoTasks: state.runningAutoTasks,
+      addRunningTask: state.addRunningTask,
+      removeRunningTask: state.removeRunningTask,
+      clearRunningTasks: state.clearRunningTasks,
       currentProject: state.currentProject,
       addAutoModeActivity: state.addAutoModeActivity,
     }))
@@ -36,7 +40,7 @@ export function useAutoMode() {
 
       switch (event.type) {
         case "auto_mode_feature_start":
-          setCurrentAutoTask(event.featureId);
+          addRunningTask(event.featureId);
           addAutoModeActivity({
             featureId: event.featureId,
             type: "start",
@@ -45,13 +49,14 @@ export function useAutoMode() {
           break;
 
         case "auto_mode_feature_complete":
-          // Feature completed - UI will reload features on its own
+          // Feature completed - remove from running tasks and UI will reload features on its own
           console.log(
             "[AutoMode] Feature completed:",
             event.featureId,
             "passes:",
             event.passes
           );
+          removeRunningTask(event.featureId);
           addAutoModeActivity({
             featureId: event.featureId,
             type: "complete",
@@ -65,7 +70,7 @@ export function useAutoMode() {
         case "auto_mode_complete":
           // All features completed
           setAutoModeRunning(false);
-          setCurrentAutoTask(null);
+          clearRunningTasks();
           console.log("[AutoMode] All features completed!");
           break;
 
@@ -115,7 +120,7 @@ export function useAutoMode() {
     });
 
     return unsubscribe;
-  }, [setCurrentAutoTask, setAutoModeRunning, addAutoModeActivity]);
+  }, [addRunningTask, removeRunningTask, clearRunningTasks, setAutoModeRunning, addAutoModeActivity]);
 
   // Start auto mode
   const start = useCallback(async () => {
@@ -158,7 +163,7 @@ export function useAutoMode() {
 
       if (result.success) {
         setAutoModeRunning(false);
-        setCurrentAutoTask(null);
+        clearRunningTasks();
         console.log("[AutoMode] Stopped successfully");
       } else {
         console.error("[AutoMode] Failed to stop:", result.error);
@@ -168,11 +173,11 @@ export function useAutoMode() {
       console.error("[AutoMode] Error stopping:", error);
       throw error;
     }
-  }, [setAutoModeRunning, setCurrentAutoTask]);
+  }, [setAutoModeRunning, clearRunningTasks]);
 
   return {
     isRunning: isAutoModeRunning,
-    currentTask: currentAutoTask,
+    runningTasks: runningAutoTasks,
     start,
     stop,
   };

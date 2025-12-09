@@ -113,18 +113,17 @@ npx playwright test tests/[feature-name].spec.ts --headed
 
 ```typescript
 import { test, expect } from "@playwright/test";
+import { getByTestId } from "./utils";
 
 test("user can send a message and receive response", async ({ page }) => {
   await page.goto("http://localhost:3007");
 
   // Happy path: main user flow
-  await page.fill('[data-testid="message-input"]', "Hello world");
-  await page.click('[data-testid="send-button"]');
+  await getByTestId(page, "message-input").fill("Hello world");
+  await getByTestId(page, "send-button").click();
 
   // Verify the expected outcome
-  await expect(page.locator('[data-testid="message-list"]')).toContainText(
-    "Hello world"
-  );
+  await expect(getByTestId(page, "message-list")).toContainText("Hello world");
 });
 ```
 
@@ -238,6 +237,55 @@ npm install -D @playwright/test
 npx playwright install
 ```
 
+**Testing Utilities:**
+
+**CRITICAL:** Create and maintain a centralized testing utilities file to make tests easier to write and maintain.
+
+Create a `tests/utils.ts` file (if it doesn't exist) with helper functions for finding elements:
+
+```typescript
+// tests/utils.ts
+import { Page, Locator } from "@playwright/test";
+
+/**
+ * Get element by test ID
+ */
+export function getByTestId(page: Page, testId: string): Locator {
+  return page.locator(`[data-testid="${testId}"]`);
+}
+
+/**
+ * Get button by text
+ */
+export function getButtonByText(page: Page, text: string): Locator {
+  return page.locator(`button:has-text("${text}")`);
+}
+
+/**
+ * Wait for element and click
+ */
+export async function clickElement(page: Page, testId: string) {
+  await getByTestId(page, testId).click();
+}
+
+// Add more utilities as you write tests...
+```
+
+**Utility Maintenance Rules:**
+
+1. **Add utilities as you write tests** - If you find yourself repeating selectors or patterns, add a utility function
+2. **Update utilities when functionality changes** - If a component changes, update the corresponding utility
+3. **Make utilities reusable** - Write helpers that can be used across multiple tests
+4. **Document utilities** - Add JSDoc comments explaining what each utility does
+
+**Example utilities to add:**
+- Finding elements by role, text, or test ID
+- Filling forms
+- Waiting for elements to appear/disappear
+- Checking element states (visible, disabled, etc.)
+- Navigation helpers
+- Common assertions
+
 **Writing Tests:**
 
 Create tests in the `tests/` directory with `.spec.ts` extension.
@@ -245,17 +293,18 @@ Create tests in the `tests/` directory with `.spec.ts` extension.
 ```typescript
 // tests/example.spec.ts
 import { test, expect } from "@playwright/test";
+import { getByTestId, clickElement } from "./utils";
 
 test.describe("Feature Name", () => {
   test("happy path: user completes main workflow", async ({ page }) => {
     await page.goto("http://localhost:3007");
 
-    // Interact with UI elements
-    await page.click('button[data-testid="action"]');
-    await page.fill('input[data-testid="input"]', "test value");
+    // Interact with UI elements using utilities
+    await getByTestId(page, "input").fill("test value");
+    await clickElement(page, "action");
 
     // Assert expected outcomes
-    await expect(page.locator('[data-testid="result"]')).toBeVisible();
+    await expect(getByTestId(page, "result")).toBeVisible();
   });
 });
 ```
@@ -278,10 +327,12 @@ npx playwright test --ui
 
 **Best Practices:**
 
+- **Use and maintain testing utilities** - Add helper functions to `tests/utils.ts` as you write tests
 - Add `data-testid` attributes to elements for reliable selectors
 - Focus on happy path tests first - they're fast and catch most regressions
 - Keep tests independent and isolated
 - Write tests as you implement features, not after
+- **Update utilities when functionality changes** - If you modify a component, update its corresponding test utility
 
 ---
 

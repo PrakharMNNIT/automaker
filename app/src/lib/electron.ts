@@ -63,6 +63,8 @@ export interface AutoModeAPI {
   status: () => Promise<{ success: boolean; isRunning?: boolean; currentFeatureId?: string | null; error?: string }>;
   runFeature: (projectPath: string, featureId: string) => Promise<{ success: boolean; passes?: boolean; error?: string }>;
   verifyFeature: (projectPath: string, featureId: string) => Promise<{ success: boolean; passes?: boolean; error?: string }>;
+  resumeFeature: (projectPath: string, featureId: string) => Promise<{ success: boolean; passes?: boolean; error?: string }>;
+  contextExists: (projectPath: string, featureId: string) => Promise<{ success: boolean; exists?: boolean; error?: string }>;
   onEvent: (callback: (event: AutoModeEvent) => void) => () => void;
 }
 
@@ -288,8 +290,9 @@ export const getElectronAPI = (): ElectronAPI => {
 
 // Mock Auto Mode state and implementation
 let mockAutoModeRunning = false;
+let mockRunningFeatures = new Set<string>(); // Track multiple concurrent feature verifications
 let mockAutoModeCallbacks: ((event: AutoModeEvent) => void)[] = [];
-let mockAutoModeTimeout: NodeJS.Timeout | null = null;
+let mockAutoModeTimeouts = new Map<string, NodeJS.Timeout>(); // Track timeouts per feature
 
 function createMockAutoModeAPI(): AutoModeAPI {
   return {
@@ -299,19 +302,21 @@ function createMockAutoModeAPI(): AutoModeAPI {
       }
 
       mockAutoModeRunning = true;
+      const featureId = "auto-mode-0";
+      mockRunningFeatures.add(featureId);
 
       // Simulate auto mode with Plan-Act-Verify phases
-      simulateAutoModeLoop(projectPath);
+      simulateAutoModeLoop(projectPath, featureId);
 
       return { success: true };
     },
 
     stop: async () => {
       mockAutoModeRunning = false;
-      if (mockAutoModeTimeout) {
-        clearTimeout(mockAutoModeTimeout);
-        mockAutoModeTimeout = null;
-      }
+      mockRunningFeatures.clear();
+      // Clear all timeouts
+      mockAutoModeTimeouts.forEach(timeout => clearTimeout(timeout));
+      mockAutoModeTimeouts.clear();
       return { success: true };
     },
 
@@ -324,25 +329,42 @@ function createMockAutoModeAPI(): AutoModeAPI {
     },
 
     runFeature: async (projectPath: string, featureId: string) => {
-      if (mockAutoModeRunning) {
-        return { success: false, error: "Auto mode is already running" };
+      if (mockRunningFeatures.has(featureId)) {
+        return { success: false, error: `Feature ${featureId} is already running` };
       }
 
-      mockAutoModeRunning = true;
-      simulateAutoModeLoop(projectPath);
+      mockRunningFeatures.add(featureId);
+      simulateAutoModeLoop(projectPath, featureId);
 
       return { success: true, passes: true };
     },
 
     verifyFeature: async (projectPath: string, featureId: string) => {
-      if (mockAutoModeRunning) {
-        return { success: false, error: "Auto mode is already running" };
+      if (mockRunningFeatures.has(featureId)) {
+        return { success: false, error: `Feature ${featureId} is already running` };
       }
 
-      mockAutoModeRunning = true;
-      simulateAutoModeLoop(projectPath);
+      mockRunningFeatures.add(featureId);
+      simulateAutoModeLoop(projectPath, featureId);
 
       return { success: true, passes: true };
+    },
+
+    resumeFeature: async (projectPath: string, featureId: string) => {
+      if (mockRunningFeatures.has(featureId)) {
+        return { success: false, error: `Feature ${featureId} is already running` };
+      }
+
+      mockRunningFeatures.add(featureId);
+      simulateAutoModeLoop(projectPath, featureId);
+
+      return { success: true, passes: true };
+    },
+
+    contextExists: async (projectPath: string, featureId: string) => {
+      // Mock implementation - simulate that context exists for some features
+      const exists = mockFileSystem[`${projectPath}/.automaker/context/${featureId}.md`] !== undefined;
+      return { success: true, exists };
     },
 
     onEvent: (callback: (event: AutoModeEvent) => void) => {
@@ -358,8 +380,7 @@ function emitAutoModeEvent(event: AutoModeEvent) {
   mockAutoModeCallbacks.forEach(cb => cb(event));
 }
 
-async function simulateAutoModeLoop(projectPath: string) {
-  const featureId = "feature-0";
+async function simulateAutoModeLoop(projectPath: string, featureId: string) {
   const mockFeature = {
     id: featureId,
     category: "Core",
@@ -375,8 +396,8 @@ async function simulateAutoModeLoop(projectPath: string) {
     feature: mockFeature,
   });
 
-  await delay(300);
-  if (!mockAutoModeRunning) return;
+  await delay(300, featureId);
+  if (!mockRunningFeatures.has(featureId)) return;
 
   // Phase 1: PLANNING
   emitAutoModeEvent({
@@ -392,8 +413,8 @@ async function simulateAutoModeLoop(projectPath: string) {
     content: "Analyzing codebase structure and creating implementation plan...",
   });
 
-  await delay(500);
-  if (!mockAutoModeRunning) return;
+  await delay(500, featureId);
+  if (!mockRunningFeatures.has(featureId)) return;
 
   // Phase 2: ACTION
   emitAutoModeEvent({
@@ -409,8 +430,8 @@ async function simulateAutoModeLoop(projectPath: string) {
     content: "Starting code implementation...",
   });
 
-  await delay(300);
-  if (!mockAutoModeRunning) return;
+  await delay(300, featureId);
+  if (!mockRunningFeatures.has(featureId)) return;
 
   // Simulate tool use
   emitAutoModeEvent({
@@ -420,8 +441,8 @@ async function simulateAutoModeLoop(projectPath: string) {
     input: { file: "package.json" },
   });
 
-  await delay(300);
-  if (!mockAutoModeRunning) return;
+  await delay(300, featureId);
+  if (!mockRunningFeatures.has(featureId)) return;
 
   emitAutoModeEvent({
     type: "auto_mode_tool",
@@ -430,8 +451,8 @@ async function simulateAutoModeLoop(projectPath: string) {
     input: { file: "src/feature.ts", content: "// Feature code" },
   });
 
-  await delay(500);
-  if (!mockAutoModeRunning) return;
+  await delay(500, featureId);
+  if (!mockRunningFeatures.has(featureId)) return;
 
   // Phase 3: VERIFICATION
   emitAutoModeEvent({
@@ -447,8 +468,8 @@ async function simulateAutoModeLoop(projectPath: string) {
     content: "Verifying implementation and checking test results...",
   });
 
-  await delay(500);
-  if (!mockAutoModeRunning) return;
+  await delay(500, featureId);
+  if (!mockRunningFeatures.has(featureId)) return;
 
   emitAutoModeEvent({
     type: "auto_mode_progress",
@@ -464,21 +485,15 @@ async function simulateAutoModeLoop(projectPath: string) {
     message: "Feature implemented successfully",
   });
 
-  await delay(300);
-  if (!mockAutoModeRunning) return;
-
-  // All features complete
-  emitAutoModeEvent({
-    type: "auto_mode_complete",
-    message: "All features completed!",
-  });
-
-  mockAutoModeRunning = false;
+  // Clean up this feature from running set
+  mockRunningFeatures.delete(featureId);
+  mockAutoModeTimeouts.delete(featureId);
 }
 
-function delay(ms: number): Promise<void> {
+function delay(ms: number, featureId: string): Promise<void> {
   return new Promise(resolve => {
-    mockAutoModeTimeout = setTimeout(resolve, ms);
+    const timeout = setTimeout(resolve, ms);
+    mockAutoModeTimeouts.set(featureId, timeout);
   });
 }
 

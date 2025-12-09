@@ -36,12 +36,21 @@ export interface ChatSession {
   archived: boolean;
 }
 
+export interface FeatureImage {
+  id: string;
+  data: string; // base64 encoded
+  mimeType: string;
+  filename: string;
+  size: number;
+}
+
 export interface Feature {
   id: string;
   category: string;
   description: string;
   steps: string[];
   status: "backlog" | "in_progress" | "verified";
+  images?: FeatureImage[];
 }
 
 export interface FileTreeNode {
@@ -96,7 +105,7 @@ export interface AppState {
 
   // Auto Mode
   isAutoModeRunning: boolean;
-  currentAutoTask: string | null; // Feature ID being worked on
+  runningAutoTasks: string[]; // Feature IDs being worked on (supports concurrent tasks)
   autoModeActivityLog: AutoModeActivity[];
 }
 
@@ -160,7 +169,9 @@ export interface AppActions {
 
   // Auto Mode actions
   setAutoModeRunning: (running: boolean) => void;
-  setCurrentAutoTask: (taskId: string | null) => void;
+  addRunningTask: (taskId: string) => void;
+  removeRunningTask: (taskId: string) => void;
+  clearRunningTasks: () => void;
   addAutoModeActivity: (activity: Omit<AutoModeActivity, "id" | "timestamp">) => void;
   clearAutoModeActivity: () => void;
 
@@ -187,7 +198,7 @@ const initialState: AppState = {
   currentChatSession: null,
   chatHistoryOpen: false,
   isAutoModeRunning: false,
-  currentAutoTask: null,
+  runningAutoTasks: [],
   autoModeActivityLog: [],
 };
 
@@ -375,7 +386,19 @@ export const useAppStore = create<AppState & AppActions>()(
 
       // Auto Mode actions
       setAutoModeRunning: (running) => set({ isAutoModeRunning: running }),
-      setCurrentAutoTask: (taskId) => set({ currentAutoTask: taskId }),
+
+      addRunningTask: (taskId) => {
+        const current = get().runningAutoTasks;
+        if (!current.includes(taskId)) {
+          set({ runningAutoTasks: [...current, taskId] });
+        }
+      },
+
+      removeRunningTask: (taskId) => {
+        set({ runningAutoTasks: get().runningAutoTasks.filter(id => id !== taskId) });
+      },
+
+      clearRunningTasks: () => set({ runningAutoTasks: [] }),
 
       addAutoModeActivity: (activity) => {
         const id = `activity-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;

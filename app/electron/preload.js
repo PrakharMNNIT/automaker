@@ -102,6 +102,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
     verifyFeature: (projectPath, featureId) =>
       ipcRenderer.invoke("auto-mode:verify-feature", { projectPath, featureId }),
 
+    // Resume a specific feature with previous context
+    resumeFeature: (projectPath, featureId) =>
+      ipcRenderer.invoke("auto-mode:resume-feature", { projectPath, featureId }),
+
+    // Check if context file exists for a feature
+    contextExists: (projectPath, featureId) =>
+      ipcRenderer.invoke("auto-mode:context-exists", { projectPath, featureId }),
+
     // Listen for auto mode events
     onEvent: (callback) => {
       const subscription = (_, data) => callback(data);

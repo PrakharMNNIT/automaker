@@ -8,30 +8,26 @@ const fs = require("fs/promises");
  */
 class AutoModeService {
   constructor() {
-    this.isRunning = false;
-    this.currentFeatureId = null;
-    this.abortController = null;
-    this.currentQuery = null;
-    this.projectPath = null;
-    this.sendToRenderer = null;
+    // Track multiple concurrent feature executions
+    this.runningFeatures = new Map(); // featureId -> { abortController, query, projectPath, sendToRenderer }
+    this.autoLoopRunning = false; // Separate flag for the auto loop
+    this.autoLoopAbortController = null;
   }
 
   /**
    * Start auto mode - continuously implement features
    */
   async start({ projectPath, sendToRenderer }) {
-    if (this.isRunning) {
-      throw new Error("Auto mode is already running");
+    if (this.autoLoopRunning) {
+      throw new Error("Auto mode loop is already running");
     }
 
-    this.isRunning = true;
-    this.projectPath = projectPath;
-    this.sendToRenderer = sendToRenderer;
+    this.autoLoopRunning = true;
 
     console.log("[AutoMode] Starting auto mode for project:", projectPath);
 
     // Run the autonomous loop
-    this.runLoop().catch((error) => {
+    this.runLoop(projectPath, sendToRenderer).catch((error) => {
       console.error("[AutoMode] Loop error:", error);
       this.stop();
     });
@@ -40,23 +36,29 @@ class AutoModeService {
   }
 
   /**
-   * Stop auto mode
+   * Stop auto mode - stops the auto loop and all running features
    */
   async stop() {
     console.log("[AutoMode] Stopping auto mode");
 
-    this.isRunning = false;
+    this.autoLoopRunning = false;
 
-    // Abort current agent execution
-    if (this.abortController) {
-      this.abortController.abort();
-      this.abortController = null;
+    // Abort auto loop if running
+    if (this.autoLoopAbortController) {
+      this.autoLoopAbortController.abort();
+      this.autoLoopAbortController = null;
     }
-    this.currentQuery = null;
 
-    this.currentFeatureId = null;
-    this.projectPath = null;
-    this.sendToRenderer = null;
+    // Abort all running features
+    for (const [featureId, execution] of this.runningFeatures.entries()) {
+      console.log(`[AutoMode] Aborting feature: ${featureId}`);
+      if (execution.abortController) {
+        execution.abortController.abort();
+      }
+    }
+
+    // Clear all running features
+    this.runningFeatures.clear();
 
     return { success: true };
   }
@@ -66,8 +68,9 @@ class AutoModeService {
    */
   getStatus() {
     return {
-      isRunning: this.isRunning,
-      currentFeatureId: this.currentFeatureId,
+      autoLoopRunning: this.autoLoopRunning,
+      runningFeatures: Array.from(this.runningFeatures.keys()),
+      runningCount: this.runningFeatures.size,
     };
   }
 
@@ -75,19 +78,24 @@ class AutoModeService {
    * Run a specific feature by ID
    */
   async runFeature({ projectPath, featureId, sendToRenderer }) {
-    if (this.isRunning) {
-      throw new Error("Auto mode is already running");
+    // Check if this specific feature is already running
+    if (this.runningFeatures.has(featureId)) {
+      throw new Error(`Feature ${featureId} is already running`);
     }
-
-    this.isRunning = true;
-    this.projectPath = projectPath;
-    this.sendToRenderer = sendToRenderer;
 
     console.log(`[AutoMode] Running specific feature: ${featureId}`);
 
+    // Register this feature as running
+    this.runningFeatures.set(featureId, {
+      abortController: null,
+      query: null,
+      projectPath,
+      sendToRenderer,
+    });
+
     try {
       // Load features
-      const features = await this.loadFeatures();
+      const features = await this.loadFeatures(projectPath);
       const feature = features.find((f) => f.id === featureId);
 
       if (!feature) {
@@ -95,25 +103,24 @@ class AutoModeService {
       }
 
       console.log(`[AutoMode] Running feature: ${feature.description}`);
-      this.currentFeatureId = feature.id;
 
       // Update feature status to in_progress
-      await this.updateFeatureStatus(featureId, "in_progress");
+      await this.updateFeatureStatus(featureId, "in_progress", projectPath);
 
-      this.sendToRenderer({
+      sendToRenderer({
         type: "auto_mode_feature_start",
         featureId: feature.id,
         feature: feature,
       });
 
       // Implement the feature
-      const result = await this.implementFeature(feature);
+      const result = await this.implementFeature(feature, projectPath, sendToRenderer);
 
       // Update feature status based on result
       const newStatus = result.passes ? "verified" : "backlog";
-      await this.updateFeatureStatus(feature.id, newStatus);
+      await this.updateFeatureStatus(feature.id, newStatus, projectPath);
 
-      this.sendToRenderer({
+      sendToRenderer({
         type: "auto_mode_feature_complete",
         featureId: feature.id,
         passes: result.passes,
@@ -123,17 +130,15 @@ class AutoModeService {
       return { success: true, passes: result.passes };
     } catch (error) {
       console.error("[AutoMode] Error running feature:", error);
-      this.sendToRenderer({
+      sendToRenderer({
         type: "auto_mode_error",
         error: error.message,
-        featureId: this.currentFeatureId,
+        featureId: featureId,
       });
       throw error;
     } finally {
-      this.isRunning = false;
-      this.currentFeatureId = null;
-      this.projectPath = null;
-      this.sendToRenderer = null;
+      // Clean up this feature's execution
+      this.runningFeatures.delete(featureId);
     }
   }
 
@@ -146,19 +151,24 @@ class AutoModeService {
       featureId,
     });
 
-    if (this.isRunning) {
-      throw new Error("Auto mode is already running");
+    // Check if this specific feature is already running
+    if (this.runningFeatures.has(featureId)) {
+      throw new Error(`Feature ${featureId} is already running`);
     }
-
-    this.isRunning = true;
-    this.projectPath = projectPath;
-    this.sendToRenderer = sendToRenderer;
 
     console.log(`[AutoMode] Verifying feature: ${featureId}`);
 
+    // Register this feature as running
+    this.runningFeatures.set(featureId, {
+      abortController: null,
+      query: null,
+      projectPath,
+      sendToRenderer,
+    });
+
     try {
       // Load features
-      const features = await this.loadFeatures();
+      const features = await this.loadFeatures(projectPath);
       const feature = features.find((f) => f.id === featureId);
 
       if (!feature) {
@@ -166,22 +176,21 @@ class AutoModeService {
       }
 
       console.log(`[AutoMode] Verifying feature: ${feature.description}`);
-      this.currentFeatureId = feature.id;
 
-      this.sendToRenderer({
+      sendToRenderer({
         type: "auto_mode_feature_start",
         featureId: feature.id,
         feature: feature,
       });
 
       // Verify the feature by running tests
-      const result = await this.verifyFeatureTests(feature);
+      const result = await this.verifyFeatureTests(feature, projectPath, sendToRenderer);
 
       // Update feature status based on result
       const newStatus = result.passes ? "verified" : "in_progress";
-      await this.updateFeatureStatus(featureId, newStatus);
+      await this.updateFeatureStatus(featureId, newStatus, projectPath);
 
-      this.sendToRenderer({
+      sendToRenderer({
         type: "auto_mode_feature_complete",
         featureId: feature.id,
         passes: result.passes,
@@ -191,76 +200,387 @@ class AutoModeService {
       return { success: true, passes: result.passes };
     } catch (error) {
       console.error("[AutoMode] Error verifying feature:", error);
-      this.sendToRenderer({
+      sendToRenderer({
         type: "auto_mode_error",
         error: error.message,
-        featureId: this.currentFeatureId,
+        featureId: featureId,
       });
       throw error;
     } finally {
-      this.isRunning = false;
-      this.currentFeatureId = null;
-      this.projectPath = null;
-      this.sendToRenderer = null;
+      // Clean up this feature's execution
+      this.runningFeatures.delete(featureId);
     }
+  }
+
+  /**
+   * Resume a feature that has previous context - loads existing context and continues implementation
+   */
+  async resumeFeature({ projectPath, featureId, sendToRenderer }) {
+    console.log(`[AutoMode] resumeFeature called with:`, {
+      projectPath,
+      featureId,
+    });
+
+    // Check if this specific feature is already running
+    if (this.runningFeatures.has(featureId)) {
+      throw new Error(`Feature ${featureId} is already running`);
+    }
+
+    console.log(`[AutoMode] Resuming feature: ${featureId}`);
+
+    // Register this feature as running
+    this.runningFeatures.set(featureId, {
+      abortController: null,
+      query: null,
+      projectPath,
+      sendToRenderer,
+    });
+
+    try {
+      // Load features
+      const features = await this.loadFeatures(projectPath);
+      const feature = features.find((f) => f.id === featureId);
+
+      if (!feature) {
+        throw new Error(`Feature ${featureId} not found`);
+      }
+
+      console.log(`[AutoMode] Resuming feature: ${feature.description}`);
+
+      sendToRenderer({
+        type: "auto_mode_feature_start",
+        featureId: feature.id,
+        feature: feature,
+      });
+
+      // Read existing context
+      const previousContext = await this.readContextFile(projectPath, featureId);
+
+      // Resume implementation with context
+      const result = await this.resumeFeatureWithContext(feature, projectPath, sendToRenderer, previousContext);
+
+      // If the agent ends early without finishing, automatically re-run
+      let attempts = 0;
+      const maxAttempts = 3;
+      let finalResult = result;
+
+      while (!finalResult.passes && attempts < maxAttempts) {
+        // Check if feature is still in progress (not verified)
+        const updatedFeatures = await this.loadFeatures(projectPath);
+        const updatedFeature = updatedFeatures.find((f) => f.id === featureId);
+
+        if (updatedFeature && updatedFeature.status === "in_progress") {
+          attempts++;
+          console.log(`[AutoMode] Feature ended early, auto-retrying (attempt ${attempts}/${maxAttempts})...`);
+
+          // Update context file with retry message
+          await this.writeToContextFile(projectPath, featureId,
+            `\n\n🔄 Auto-retry #${attempts} - Continuing implementation...\n\n`);
+
+          sendToRenderer({
+            type: "auto_mode_progress",
+            featureId: feature.id,
+            content: `\n🔄 Auto-retry #${attempts} - Agent ended early, continuing...\n`,
+          });
+
+          // Read updated context
+          const retryContext = await this.readContextFile(projectPath, featureId);
+
+          // Resume again with full context
+          finalResult = await this.resumeFeatureWithContext(feature, projectPath, sendToRenderer, retryContext);
+        } else {
+          break;
+        }
+      }
+
+      // Update feature status based on final result
+      const newStatus = finalResult.passes ? "verified" : "in_progress";
+      await this.updateFeatureStatus(featureId, newStatus, projectPath);
+
+      sendToRenderer({
+        type: "auto_mode_feature_complete",
+        featureId: feature.id,
+        passes: finalResult.passes,
+        message: finalResult.message,
+      });
+
+      return { success: true, passes: finalResult.passes };
+    } catch (error) {
+      console.error("[AutoMode] Error resuming feature:", error);
+      sendToRenderer({
+        type: "auto_mode_error",
+        error: error.message,
+        featureId: featureId,
+      });
+      throw error;
+    } finally {
+      // Clean up this feature's execution
+      this.runningFeatures.delete(featureId);
+    }
+  }
+
+  /**
+   * Read context file for a feature
+   */
+  async readContextFile(projectPath, featureId) {
+    try {
+      const contextPath = path.join(projectPath, ".automaker", "context", `${featureId}.md`);
+      const content = await fs.readFile(contextPath, "utf-8");
+      return content;
+    } catch (error) {
+      console.log(`[AutoMode] No context file found for ${featureId}`);
+      return null;
+    }
+  }
+
+  /**
+   * Resume feature implementation with previous context
+   */
+  async resumeFeatureWithContext(feature, projectPath, sendToRenderer, previousContext) {
+    console.log(`[AutoMode] Resuming with context for: ${feature.description}`);
+
+    // Get the execution context for this feature
+    const execution = this.runningFeatures.get(feature.id);
+    if (!execution) {
+      throw new Error(`Feature ${feature.id} not registered in runningFeatures`);
+    }
+
+    try {
+      const resumeMessage = `\n🔄 Resuming implementation for: ${feature.description}\n`;
+      await this.writeToContextFile(projectPath, feature.id, resumeMessage);
+
+      sendToRenderer({
+        type: "auto_mode_phase",
+        featureId: feature.id,
+        phase: "action",
+        message: `Resuming implementation for: ${feature.description}`,
+      });
+
+      const abortController = new AbortController();
+      execution.abortController = abortController;
+
+      const options = {
+        model: "claude-opus-4-5-20251101",
+        systemPrompt: this.getVerificationPrompt(),
+        maxTurns: 1000,
+        cwd: projectPath,
+        allowedTools: ["Read", "Write", "Edit", "Glob", "Grep", "Bash", "WebSearch", "WebFetch"],
+        permissionMode: "acceptEdits",
+        sandbox: {
+          enabled: true,
+          autoAllowBashIfSandboxed: true,
+        },
+        abortController: abortController,
+      };
+
+      // Build prompt with previous context
+      const prompt = this.buildResumePrompt(feature, previousContext);
+
+      const currentQuery = query({ prompt, options });
+      execution.query = currentQuery;
+
+      let responseText = "";
+      for await (const msg of currentQuery) {
+        // Check if this specific feature was aborted
+        if (!this.runningFeatures.has(feature.id)) break;
+
+        if (msg.type === "assistant" && msg.message?.content) {
+          for (const block of msg.message.content) {
+            if (block.type === "text") {
+              responseText += block.text;
+
+              await this.writeToContextFile(projectPath, feature.id, block.text);
+
+              sendToRenderer({
+                type: "auto_mode_progress",
+                featureId: feature.id,
+                content: block.text,
+              });
+            } else if (block.type === "tool_use") {
+              const toolMsg = `\n🔧 Tool: ${block.name}\n`;
+              await this.writeToContextFile(projectPath, feature.id, toolMsg);
+
+              sendToRenderer({
+                type: "auto_mode_tool",
+                featureId: feature.id,
+                tool: block.name,
+                input: block.input,
+              });
+            }
+          }
+        }
+      }
+
+      execution.query = null;
+      execution.abortController = null;
+
+      // Check if feature was marked as verified
+      const updatedFeatures = await this.loadFeatures(projectPath);
+      const updatedFeature = updatedFeatures.find((f) => f.id === feature.id);
+      const passes = updatedFeature?.status === "verified";
+
+      const finalMsg = passes
+        ? "✓ Feature successfully verified and completed\n"
+        : "⚠ Feature still in progress - may need additional work\n";
+
+      await this.writeToContextFile(projectPath, feature.id, finalMsg);
+
+      sendToRenderer({
+        type: "auto_mode_progress",
+        featureId: feature.id,
+        content: finalMsg,
+      });
+
+      return {
+        passes,
+        message: responseText.substring(0, 500),
+      };
+    } catch (error) {
+      if (error instanceof AbortError || error?.name === "AbortError") {
+        console.log("[AutoMode] Resume aborted");
+        if (execution) {
+          execution.abortController = null;
+          execution.query = null;
+        }
+        return {
+          passes: false,
+          message: "Resume aborted",
+        };
+      }
+
+      console.error("[AutoMode] Error resuming feature:", error);
+      if (execution) {
+        execution.abortController = null;
+        execution.query = null;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Build prompt for resuming feature with previous context
+   */
+  buildResumePrompt(feature, previousContext) {
+    return `You are resuming work on a feature implementation that was previously started.
+
+**Current Feature:**
+
+Category: ${feature.category}
+Description: ${feature.description}
+
+**Steps to Complete:**
+${feature.steps.map((step, i) => `${i + 1}. ${step}`).join("\n")}
+
+**Previous Work Context:**
+
+${previousContext || "No previous context available - this is a fresh start."}
+
+**Your Task:**
+
+Continue where you left off and complete the feature implementation:
+
+1. Review the previous work context above to understand what has been done
+2. Continue implementing the feature according to the description and steps
+3. Write Playwright tests to verify the feature works correctly (if not already done)
+4. Run the tests and ensure they pass
+5. **DELETE the test file(s) you created** - tests are only for immediate verification
+6. Update .automaker/feature_list.json to mark this feature as "status": "verified"
+7. Commit your changes with git
+
+**Important Guidelines:**
+
+- Review what was already done in the previous context
+- Don't redo work that's already complete - continue from where it left off
+- Focus on completing any remaining tasks
+- Write comprehensive Playwright tests if not already done
+- Ensure all tests pass before marking as verified
+- **CRITICAL: Delete test files after verification**
+- Make a git commit when complete
+
+Begin by assessing what's been done and what remains to be completed.`;
   }
 
   /**
    * Main autonomous loop - picks and implements features
    */
-  async runLoop() {
-    while (this.isRunning) {
+  async runLoop(projectPath, sendToRenderer) {
+    while (this.autoLoopRunning) {
+      let currentFeatureId = null;
       try {
         // Load features from .automaker/feature_list.json
-        const features = await this.loadFeatures();
+        const features = await this.loadFeatures(projectPath);
 
         // Find highest priority incomplete feature
         const nextFeature = this.selectNextFeature(features);
 
         if (!nextFeature) {
           console.log("[AutoMode] No more features to implement");
-          this.sendToRenderer({
+          sendToRenderer({
             type: "auto_mode_complete",
             message: "All features completed!",
           });
           break;
         }
 
-        console.log(`[AutoMode] Selected feature: ${nextFeature.description}`);
-        this.currentFeatureId = nextFeature.id;
+        currentFeatureId = nextFeature.id;
 
-        this.sendToRenderer({
+        // Skip if this feature is already running (via manual trigger)
+        if (this.runningFeatures.has(currentFeatureId)) {
+          console.log(`[AutoMode] Skipping ${currentFeatureId} - already running`);
+          await this.sleep(3000);
+          continue;
+        }
+
+        console.log(`[AutoMode] Selected feature: ${nextFeature.description}`);
+
+        sendToRenderer({
           type: "auto_mode_feature_start",
           featureId: nextFeature.id,
           feature: nextFeature,
         });
 
+        // Register this feature as running
+        this.runningFeatures.set(currentFeatureId, {
+          abortController: null,
+          query: null,
+          projectPath,
+          sendToRenderer,
+        });
+
         // Implement the feature
-        const result = await this.implementFeature(nextFeature);
+        const result = await this.implementFeature(nextFeature, projectPath, sendToRenderer);
 
         // Update feature status based on result
         const newStatus = result.passes ? "verified" : "backlog";
-        await this.updateFeatureStatus(nextFeature.id, newStatus);
+        await this.updateFeatureStatus(nextFeature.id, newStatus, projectPath);
 
-        this.sendToRenderer({
+        sendToRenderer({
           type: "auto_mode_feature_complete",
           featureId: nextFeature.id,
           passes: result.passes,
           message: result.message,
         });
 
+        // Clean up
+        this.runningFeatures.delete(currentFeatureId);
+
         // Small delay before next feature
-        if (this.isRunning) {
+        if (this.autoLoopRunning) {
           await this.sleep(3000);
         }
       } catch (error) {
         console.error("[AutoMode] Error in loop iteration:", error);
 
-        this.sendToRenderer({
+        sendToRenderer({
           type: "auto_mode_error",
           error: error.message,
-          featureId: this.currentFeatureId,
+          featureId: currentFeatureId,
         });
+
+        // Clean up on error
+        if (currentFeatureId) {
+          this.runningFeatures.delete(currentFeatureId);
+        }
 
         // Wait before retrying
         await this.sleep(5000);
@@ -268,15 +588,15 @@ class AutoModeService {
     }
 
     console.log("[AutoMode] Loop ended");
-    this.isRunning = false;
+    this.autoLoopRunning = false;
   }
 
   /**
    * Load features from .automaker/feature_list.json
    */
-  async loadFeatures() {
+  async loadFeatures(projectPath) {
     const featuresPath = path.join(
-      this.projectPath,
+      projectPath,
       ".automaker",
       "feature_list.json"
     );
@@ -308,11 +628,11 @@ class AutoModeService {
   /**
    * Write output to feature context file
    */
-  async writeToContextFile(featureId, content) {
-    if (!this.projectPath) return;
+  async writeToContextFile(projectPath, featureId, content) {
+    if (!projectPath) return;
 
     try {
-      const contextDir = path.join(this.projectPath, ".automaker", "context");
+      const contextDir = path.join(projectPath, ".automaker", "context");
 
       // Ensure directory exists
       try {
@@ -339,17 +659,23 @@ class AutoModeService {
    * Implement a single feature using Claude Agent SDK
    * Uses a Plan-Act-Verify loop with detailed phase logging
    */
-  async implementFeature(feature) {
+  async implementFeature(feature, projectPath, sendToRenderer) {
     console.log(`[AutoMode] Implementing: ${feature.description}`);
+
+    // Get the execution context for this feature
+    const execution = this.runningFeatures.get(feature.id);
+    if (!execution) {
+      throw new Error(`Feature ${feature.id} not registered in runningFeatures`);
+    }
 
     try {
       // ========================================
       // PHASE 1: PLANNING
       // ========================================
       const planningMessage = `📋 Planning implementation for: ${feature.description}\n`;
-      await this.writeToContextFile(feature.id, planningMessage);
+      await this.writeToContextFile(projectPath, feature.id, planningMessage);
 
-      this.sendToRenderer({
+      sendToRenderer({
         type: "auto_mode_phase",
         featureId: feature.id,
         phase: "planning",
@@ -357,14 +683,15 @@ class AutoModeService {
       });
       console.log(`[AutoMode] Phase: PLANNING for ${feature.description}`);
 
-      this.abortController = new AbortController();
+      const abortController = new AbortController();
+      execution.abortController = abortController;
 
       // Configure options for the SDK query
       const options = {
         model: "claude-opus-4-5-20251101",
         systemPrompt: this.getCodingPrompt(),
-        maxTurns: 30,
-        cwd: this.projectPath,
+        maxTurns: 1000,
+        cwd: projectPath,
         allowedTools: [
           "Read",
           "Write",
@@ -380,14 +707,14 @@ class AutoModeService {
           enabled: true,
           autoAllowBashIfSandboxed: true,
         },
-        abortController: this.abortController,
+        abortController: abortController,
       };
 
       // Build the prompt for this specific feature
       const prompt = this.buildFeaturePrompt(feature);
 
       // Planning: Analyze the codebase and create implementation plan
-      this.sendToRenderer({
+      sendToRenderer({
         type: "auto_mode_progress",
         featureId: feature.id,
         content:
@@ -401,9 +728,9 @@ class AutoModeService {
       // PHASE 2: ACTION
       // ========================================
       const actionMessage = `⚡ Executing implementation for: ${feature.description}\n`;
-      await this.writeToContextFile(feature.id, actionMessage);
+      await this.writeToContextFile(projectPath, feature.id, actionMessage);
 
-      this.sendToRenderer({
+      sendToRenderer({
         type: "auto_mode_phase",
         featureId: feature.id,
         phase: "action",
@@ -412,13 +739,15 @@ class AutoModeService {
       console.log(`[AutoMode] Phase: ACTION for ${feature.description}`);
 
       // Send query
-      this.currentQuery = query({ prompt, options });
+      const currentQuery = query({ prompt, options });
+      execution.query = currentQuery;
 
       // Stream responses
       let responseText = "";
       let hasStartedToolUse = false;
-      for await (const msg of this.currentQuery) {
-        if (!this.isRunning) break;
+      for await (const msg of currentQuery) {
+        // Check if this specific feature was aborted
+        if (!this.runningFeatures.has(feature.id)) break;
 
         if (msg.type === "assistant" && msg.message?.content) {
           for (const block of msg.message.content) {
@@ -426,10 +755,10 @@ class AutoModeService {
               responseText += block.text;
 
               // Write to context file
-              await this.writeToContextFile(feature.id, block.text);
+              await this.writeToContextFile(projectPath, feature.id, block.text);
 
               // Stream progress to renderer
-              this.sendToRenderer({
+              sendToRenderer({
                 type: "auto_mode_progress",
                 featureId: feature.id,
                 content: block.text,
@@ -439,8 +768,8 @@ class AutoModeService {
               if (!hasStartedToolUse) {
                 hasStartedToolUse = true;
                 const startMsg = "Starting code implementation...\n";
-                await this.writeToContextFile(feature.id, startMsg);
-                this.sendToRenderer({
+                await this.writeToContextFile(projectPath, feature.id, startMsg);
+                sendToRenderer({
                   type: "auto_mode_progress",
                   featureId: feature.id,
                   content: startMsg,
@@ -449,10 +778,10 @@ class AutoModeService {
 
               // Write tool use to context file
               const toolMsg = `\n🔧 Tool: ${block.name}\n`;
-              await this.writeToContextFile(feature.id, toolMsg);
+              await this.writeToContextFile(projectPath, feature.id, toolMsg);
 
               // Notify about tool use
-              this.sendToRenderer({
+              sendToRenderer({
                 type: "auto_mode_tool",
                 featureId: feature.id,
                 tool: block.name,
@@ -463,16 +792,16 @@ class AutoModeService {
         }
       }
 
-      this.currentQuery = null;
-      this.abortController = null;
+      execution.query = null;
+      execution.abortController = null;
 
       // ========================================
       // PHASE 3: VERIFICATION
       // ========================================
       const verificationMessage = `✅ Verifying implementation for: ${feature.description}\n`;
-      await this.writeToContextFile(feature.id, verificationMessage);
+      await this.writeToContextFile(projectPath, feature.id, verificationMessage);
 
-      this.sendToRenderer({
+      sendToRenderer({
         type: "auto_mode_phase",
         featureId: feature.id,
         phase: "verification",
@@ -482,15 +811,15 @@ class AutoModeService {
 
       const checkingMsg =
         "Verifying implementation and checking test results...\n";
-      await this.writeToContextFile(feature.id, checkingMsg);
-      this.sendToRenderer({
+      await this.writeToContextFile(projectPath, feature.id, checkingMsg);
+      sendToRenderer({
         type: "auto_mode_progress",
         featureId: feature.id,
         content: checkingMsg,
       });
 
       // Re-load features to check if it was marked as verified
-      const updatedFeatures = await this.loadFeatures();
+      const updatedFeatures = await this.loadFeatures(projectPath);
       const updatedFeature = updatedFeatures.find((f) => f.id === feature.id);
       const passes = updatedFeature?.status === "verified";
 
@@ -499,8 +828,8 @@ class AutoModeService {
         ? "✓ Verification successful: All tests passed\n"
         : "✗ Verification: Tests need attention\n";
 
-      await this.writeToContextFile(feature.id, resultMsg);
-      this.sendToRenderer({
+      await this.writeToContextFile(projectPath, feature.id, resultMsg);
+      sendToRenderer({
         type: "auto_mode_progress",
         featureId: feature.id,
         content: resultMsg,
@@ -513,8 +842,10 @@ class AutoModeService {
     } catch (error) {
       if (error instanceof AbortError || error?.name === "AbortError") {
         console.log("[AutoMode] Feature run aborted");
-        this.abortController = null;
-        this.currentQuery = null;
+        if (execution) {
+          execution.abortController = null;
+          execution.query = null;
+        }
         return {
           passes: false,
           message: "Auto mode aborted",
@@ -524,8 +855,10 @@ class AutoModeService {
       console.error("[AutoMode] Error implementing feature:", error);
 
       // Clean up
-      this.abortController = null;
-      this.currentQuery = null;
+      if (execution) {
+        execution.abortController = null;
+        execution.query = null;
+      }
 
       throw error;
     }
@@ -534,8 +867,8 @@ class AutoModeService {
   /**
    * Update feature status in .automaker/feature_list.json
    */
-  async updateFeatureStatus(featureId, status) {
-    const features = await this.loadFeatures();
+  async updateFeatureStatus(featureId, status, projectPath) {
+    const features = await this.loadFeatures(projectPath);
     const feature = features.find((f) => f.id === featureId);
 
     if (!feature) {
@@ -548,7 +881,7 @@ class AutoModeService {
 
     // Save back to file
     const featuresPath = path.join(
-      this.projectPath,
+      projectPath,
       ".automaker",
       "feature_list.json"
     );
@@ -567,71 +900,80 @@ class AutoModeService {
   /**
    * Verify feature tests (runs tests and checks if they pass)
    */
-  async verifyFeatureTests(feature) {
+  async verifyFeatureTests(feature, projectPath, sendToRenderer) {
     console.log(`[AutoMode] Verifying tests for: ${feature.description}`);
+
+    // Get the execution context for this feature
+    const execution = this.runningFeatures.get(feature.id);
+    if (!execution) {
+      throw new Error(`Feature ${feature.id} not registered in runningFeatures`);
+    }
 
     try {
       const verifyMsg = `\n✅ Verifying tests for: ${feature.description}\n`;
-      await this.writeToContextFile(feature.id, verifyMsg);
+      await this.writeToContextFile(projectPath, feature.id, verifyMsg);
 
-      this.sendToRenderer({
+      sendToRenderer({
         type: "auto_mode_phase",
         featureId: feature.id,
         phase: "verification",
         message: `Verifying tests for: ${feature.description}`,
       });
 
-      this.abortController = new AbortController();
+      const abortController = new AbortController();
+      execution.abortController = abortController;
 
       const options = {
         model: "claude-opus-4-5-20251101",
         systemPrompt: this.getVerificationPrompt(),
-        maxTurns: 15,
-        cwd: this.projectPath,
+        maxTurns: 1000,
+        cwd: projectPath,
         allowedTools: ["Read", "Write", "Edit", "Glob", "Grep", "Bash"],
         permissionMode: "acceptEdits",
         sandbox: {
           enabled: true,
           autoAllowBashIfSandboxed: true,
         },
-        abortController: this.abortController,
+        abortController: abortController,
       };
 
       const prompt = this.buildVerificationPrompt(feature);
 
       const runningTestsMsg =
         "Running Playwright tests to verify feature implementation...\n";
-      await this.writeToContextFile(feature.id, runningTestsMsg);
+      await this.writeToContextFile(projectPath, feature.id, runningTestsMsg);
 
-      this.sendToRenderer({
+      sendToRenderer({
         type: "auto_mode_progress",
         featureId: feature.id,
         content: runningTestsMsg,
       });
 
-      this.currentQuery = query({ prompt, options });
+      const currentQuery = query({ prompt, options });
+      execution.query = currentQuery;
 
       let responseText = "";
-      for await (const msg of this.currentQuery) {
-        if (!this.isRunning) break;
+      for await (const msg of currentQuery) {
+        // Check if this specific feature was aborted
+        if (!this.runningFeatures.has(feature.id)) break;
 
         if (msg.type === "assistant" && msg.message?.content) {
           for (const block of msg.message.content) {
             if (block.type === "text") {
               responseText += block.text;
 
-              await this.writeToContextFile(feature.id, block.text);
+              await this.writeToContextFile(projectPath, feature.id, block.text);
 
-              this.sendToRenderer({
+              sendToRenderer({
                 type: "auto_mode_progress",
                 featureId: feature.id,
                 content: block.text,
               });
             } else if (block.type === "tool_use") {
               const toolMsg = `\n🔧 Tool: ${block.name}\n`;
-              await this.writeToContextFile(feature.id, toolMsg);
+              await this.writeToContextFile(projectPath, feature.id, toolMsg);
 
-              this.sendToRenderer({
+              sendToRenderer({
                 type: "auto_mode_tool",
                 featureId: feature.id,
                 tool: block.name,
@@ -642,11 +984,11 @@ class AutoModeService {
         }
       }
 
-      this.currentQuery = null;
-      this.abortController = null;
+      execution.query = null;
+      execution.abortController = null;
 
       // Re-load features to check if it was marked as verified
-      const updatedFeatures = await this.loadFeatures();
+      const updatedFeatures = await this.loadFeatures(projectPath);
       const updatedFeature = updatedFeatures.find((f) => f.id === feature.id);
       const passes = updatedFeature?.status === "verified";
 
@@ -654,9 +996,9 @@ class AutoModeService {
         ? "✓ Verification successful: All tests passed\n"
         : "✗ Tests failed or not all passing - feature remains in progress\n";
 
-      await this.writeToContextFile(feature.id, finalMsg);
+      await this.writeToContextFile(projectPath, feature.id, finalMsg);
 
-      this.sendToRenderer({
+      sendToRenderer({
         type: "auto_mode_progress",
         featureId: feature.id,
         content: finalMsg,
@@ -669,8 +1011,10 @@ class AutoModeService {
     } catch (error) {
       if (error instanceof AbortError || error?.name === "AbortError") {
         console.log("[AutoMode] Verification aborted");
-        this.abortController = null;
-        this.currentQuery = null;
+        if (execution) {
+          execution.abortController = null;
+          execution.query = null;
+        }
         return {
           passes: false,
           message: "Verification aborted",
@@ -678,8 +1022,10 @@ class AutoModeService {
       }
 
       console.error("[AutoMode] Error verifying feature:", error);
-      this.abortController = null;
-      this.currentQuery = null;
+      if (execution) {
+        execution.abortController = null;
+        execution.query = null;
+      }
       throw error;
     }
   }
@@ -719,6 +1065,22 @@ ${feature.steps.map((step, i) => `${i + 1}. ${step}`).join("\n")}
 - **CRITICAL: Delete test files after verification** - tests accumulate and become brittle
 - Make a git commit when complete
 
+**Testing Utilities (CRITICAL):**
+
+1. **Create/maintain tests/utils.ts** - Add helper functions for finding elements and common test operations
+2. **Use utilities in tests** - Import and use helper functions instead of repeating selectors
+3. **Add utilities as needed** - When you write a test, if you need a new helper, add it to utils.ts
+4. **Update utilities when functionality changes** - If you modify components, update corresponding utilities
+
+Example utilities to add:
+- getByTestId(page, testId) - Find elements by data-testid
+- getButtonByText(page, text) - Find buttons by text
+- clickElement(page, testId) - Click an element by test ID
+- fillForm(page, formData) - Fill form fields
+- waitForElement(page, testId) - Wait for element to appear
+
+This makes future tests easier to write and maintain!
+
 **Test Deletion Policy:**
 After tests pass, delete them immediately:
 \`\`\`bash
@@ -732,9 +1094,9 @@ Begin by reading the project structure and then implementing the feature.`;
    * Build the prompt for verifying a specific feature
    */
   buildVerificationPrompt(feature) {
-    return `You are verifying that a feature implementation is complete and working correctly.
+    return `You are implementing and verifying a feature until it is complete and working correctly.
 
-**Feature to Verify:**
+**Feature to Implement/Verify:**
 
 ID: ${feature.id}
 Category: ${feature.category}
@@ -746,18 +1108,29 @@ ${feature.steps.map((step, i) => `${i + 1}. ${step}`).join("\n")}
 
 **Your Task:**
 
-1. Read the .automaker/feature_list.json file to see the current status
-2. Look for Playwright tests related to this feature
-3. Run the Playwright tests for this feature: npx playwright test tests/[feature-name].spec.ts
-4. Check if all tests pass
-5. If ALL tests pass:
+1. Read the project files to understand the current implementation
+2. If the feature is not fully implemented, continue implementing it
+3. Write or update Playwright tests to verify the feature works correctly
+4. Run the Playwright tests: npx playwright test tests/[feature-name].spec.ts
+5. Check if all tests pass
+6. **If ANY tests fail:**
+   - Analyze the test failures and error messages
+   - Fix the implementation code to make the tests pass
+   - Update test utilities in tests/utils.ts if needed
+   - Re-run the tests to verify the fixes
+   - **REPEAT this process until ALL tests pass**
+   - Keep the feature "status" as "in_progress" in .automaker/feature_list.json
+7. **If ALL tests pass:**
    - **DELETE the test file(s) for this feature** - tests are only for immediate verification
    - Update .automaker/feature_list.json to set this feature's "status" to "verified"
-   - Explain what tests passed and that you deleted them
-6. If ANY tests fail:
-   - Keep the feature "status" as "in_progress" in .automaker/feature_list.json
-   - Explain what tests failed and why
-7. Fix the issues until the tests pass again
+   - Explain what was implemented/fixed and that all tests passed
+   - Commit your changes with git
+
+**Testing Utilities:**
+- Check if tests/utils.ts exists and is being used
+- If utilities are outdated due to functionality changes, update them
+- Add new utilities as needed for this feature's tests
+- Ensure test utilities stay in sync with code changes
 
 **Test Deletion Policy:**
 After tests pass, delete them immediately:
@@ -766,26 +1139,39 @@ rm tests/[feature-name].spec.ts
 \`\`\`
 
 **Important:**
+- **CONTINUE IMPLEMENTING until all tests pass** - don't stop at the first failure
 - Only mark as "verified" if Playwright tests pass
 - **CRITICAL: Delete test files after they pass** - tests should not accumulate
-- Focus on running tests, deleting them, and updating the status accurately
-- Be thorough in checking test results
+- Update test utilities if functionality changed
+- Make a git commit when the feature is complete
+- Be thorough and persistent in fixing issues
 
-Begin by reading .automaker/feature_list.json and finding the appropriate tests to run.`;
+Begin by reading the project structure and understanding what needs to be implemented or fixed.`;
   }
 
   /**
    * Get the system prompt for verification agent
    */
   getVerificationPrompt() {
-    return `You are an AI verification agent focused on testing and validation.
+    return `You are an AI implementation and verification agent focused on completing features and ensuring they work.
 
 Your role is to:
+- **Continue implementing features until they are complete** - don't stop at the first failure
+- Write or update code to fix failing tests
 - Run Playwright tests to verify feature implementations
+- If tests fail, analyze errors and fix the implementation
 - If other tests fail, verify if those tests are still accurate or should be updated or deleted
-- Continue rerunning tests until all tests pass
+- Continue rerunning tests and fixing issues until ALL tests pass
 - **DELETE test files after successful verification** - tests are only for immediate feature verification
 - Update feature status to verified in .automaker/feature_list.json after all tests pass
+- **Update test utilities (tests/utils.ts) if functionality changed** - keep helpers in sync with code
+- Commit working code to git
+
+**Testing Utilities:**
+- Check if tests/utils.ts needs updates based on code changes
+- If a component's selectors or behavior changed, update the corresponding utility functions
+- Add new utilities as needed for the feature's tests
+- Ensure utilities remain accurate and helpful for future tests
 
 **Test Deletion Policy:**
 Tests should NOT accumulate. After a feature is verified:
@@ -796,11 +1182,13 @@ This prevents test brittleness as the app changes rapidly.
 
 You have access to:
 - Read and edit files
+- Write new code or modify existing code
 - Run bash commands (especially Playwright tests)
 - Delete files (rm command)
 - Analyze test output
+- Make git commits
 
-Be accurate and thorough in your verification process. Always delete tests after they pass.`;
+**CRITICAL:** Be persistent and thorough - keep iterating on the implementation until all tests pass. Don't give up after the first failure. Always delete tests after they pass and commit your work.`;
   }
 
   /**
@@ -812,11 +1200,19 @@ Be accurate and thorough in your verification process. Always delete tests after
 Your role is to:
 - Implement features exactly as specified
 - Write production-quality code
-- Create comprehensive Playwright tests
+- Create comprehensive Playwright tests using testing utilities
 - Ensure all tests pass before marking features complete
 - **DELETE test files after successful verification** - tests are only for immediate feature verification
 - Commit working code to git
 - Be thorough and detail-oriented
+
+**Testing Utilities (CRITICAL):**
+- **Create and maintain tests/utils.ts** with helper functions for finding elements and common operations
+- **Always use utilities in tests** instead of repeating selectors
+- **Add new utilities as you write tests** - if you need a helper, add it to utils.ts
+- **Update utilities when functionality changes** - keep helpers in sync with code changes
+
+This makes future tests easier to write and more maintainable!
 
 **Test Deletion Policy:**
 Tests should NOT accumulate. After a feature is verified:

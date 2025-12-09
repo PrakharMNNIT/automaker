@@ -12,10 +12,25 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { useAppStore } from "@/store/app-store";
 import { getElectronAPI } from "@/lib/electron";
-import { FolderOpen, Plus, Cpu, Folder, Clock, Sparkles, MessageSquare, ChevronDown } from "lucide-react";
+import {
+  FolderOpen,
+  Plus,
+  Cpu,
+  Folder,
+  Clock,
+  Sparkles,
+  MessageSquare,
+  ChevronDown,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,7 +39,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export function WelcomeView() {
-  const { projects, addProject, setCurrentProject, setCurrentView } = useAppStore();
+  const { projects, addProject, setCurrentProject, setCurrentView } =
+    useAppStore();
   const [showNewProjectDialog, setShowNewProjectDialog] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [newProjectPath, setNewProjectPath] = useState("");
@@ -101,13 +117,17 @@ export function WelcomeView() {
       );
 
       await api.writeFile(
-        `${projectPath}/feature_list.json`,
+        `${projectPath}/.automaker/feature_list.json`,
         JSON.stringify(
           [
             {
               category: "Core",
               description: "First feature to implement",
-              steps: ["Step 1: Define requirements", "Step 2: Implement", "Step 3: Test"],
+              steps: [
+                "Step 1: Define requirements",
+                "Step 2: Implement",
+                "Step 3: Test",
+              ],
               passes: false,
             },
           ],
@@ -151,8 +171,12 @@ export function WelcomeView() {
               <Cpu className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-white">Welcome to Automaker</h1>
-              <p className="text-sm text-zinc-400">Your autonomous AI development studio</p>
+              <h1 className="text-2xl font-bold text-white">
+                Welcome to Automaker
+              </h1>
+              <p className="text-sm text-zinc-400">
+                Your autonomous AI development studio
+              </p>
             </div>
           </div>
         </div>
@@ -174,9 +198,12 @@ export function WelcomeView() {
                     <Plus className="w-6 h-6 text-white" />
                   </div>
                   <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-white mb-1">New Project</h3>
+                    <h3 className="text-lg font-semibold text-white mb-1">
+                      New Project
+                    </h3>
                     <p className="text-sm text-zinc-400">
-                      Create a new project from scratch with AI-powered development
+                      Create a new project from scratch with AI-powered
+                      development
                     </p>
                   </div>
                 </div>
@@ -223,7 +250,9 @@ export function WelcomeView() {
                     <FolderOpen className="w-6 h-6 text-zinc-400 group-hover:text-white transition-colors" />
                   </div>
                   <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-white mb-1">Open Project</h3>
+                    <h3 className="text-lg font-semibold text-white mb-1">
+                      Open Project
+                    </h3>
                     <p className="text-sm text-zinc-400">
                       Open an existing project folder to continue working
                     </p>
@@ -246,7 +275,9 @@ export function WelcomeView() {
             <div>
               <div className="flex items-center gap-2 mb-4">
                 <Clock className="w-5 h-5 text-zinc-400" />
-                <h2 className="text-lg font-semibold text-white">Recent Projects</h2>
+                <h2 className="text-lg font-semibold text-white">
+                  Recent Projects
+                </h2>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {recentProjects.map((project) => (
@@ -266,10 +297,14 @@ export function WelcomeView() {
                           <p className="font-medium text-white truncate group-hover:text-brand-500 transition-colors">
                             {project.name}
                           </p>
-                          <p className="text-xs text-zinc-500 truncate mt-0.5">{project.path}</p>
+                          <p className="text-xs text-zinc-500 truncate mt-0.5">
+                            {project.path}
+                          </p>
                           {project.lastOpened && (
                             <p className="text-xs text-zinc-600 mt-1">
-                              {new Date(project.lastOpened).toLocaleDateString()}
+                              {new Date(
+                                project.lastOpened
+                              ).toLocaleDateString()}
                             </p>
                           )}
                         </div>
@@ -287,7 +322,9 @@ export function WelcomeView() {
               <div className="w-16 h-16 rounded-2xl bg-zinc-900/50 border border-white/10 flex items-center justify-center mb-4">
                 <Sparkles className="w-8 h-8 text-zinc-600" />
               </div>
-              <h3 className="text-lg font-semibold text-white mb-2">No projects yet</h3>
+              <h3 className="text-lg font-semibold text-white mb-2">
+                No projects yet
+              </h3>
               <p className="text-sm text-zinc-400 max-w-md">
                 Get started by creating a new project or opening an existing one
               </p>
@@ -297,7 +334,10 @@ export function WelcomeView() {
       </div>
 
       {/* New Project Dialog */}
-      <Dialog open={showNewProjectDialog} onOpenChange={setShowNewProjectDialog}>
+      <Dialog
+        open={showNewProjectDialog}
+        onOpenChange={setShowNewProjectDialog}
+      >
         <DialogContent
           className="bg-zinc-900 border-white/10"
           data-testid="new-project-dialog"

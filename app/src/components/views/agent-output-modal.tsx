@@ -106,6 +106,11 @@ export function AgentOutputModal({
     if (!api?.autoMode) return;
 
     const unsubscribe = api.autoMode.onEvent((event) => {
+      // Filter events for this specific feature only
+      if (event.featureId !== featureId) {
+        return;
+      }
+
       let newContent = "";
 
       if (event.type === "auto_mode_progress") {

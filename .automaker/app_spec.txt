@@ -2,7 +2,7 @@
   <project_name>Automaker - Autonomous AI Development Studio</project_name>
   
   <overview>
-    Automaker is a native desktop application that empowers developers to build software autonomously. It acts as an intelligent orchestrator, managing the entire development lifecycle from specification to implementation. Built with Electron and Next.js, it provides a seamless GUI for configuring projects, defining requirements (app_spec.txt), and tracking progress via an interactive Kanban board. It leverages a dual-model architecture: Claude 3.5 Opus for complex logic/architecture and Gemini 3 Pro for UI/UX design.
+    Automaker is a native desktop application that empowers developers to build software autonomously. It acts as an intelligent orchestrator, managing the entire development lifecycle from specification to implementation. Built with Electron and Next.js, it provides a seamless GUI for configuring projects, defining requirements (.automaker/app_spec.txt), and tracking progress via an interactive Kanban board. It leverages a dual-model architecture: Claude 3.5 Opus for complex logic/architecture and Gemini 3 Pro for UI/UX design.
   </overview>
 
   <technology_stack>
@@ -41,15 +41,15 @@
     
     <intelligent_analysis>
       - "Project Ingestion": Analyzes existing codebases to understand structure
-      - Auto-generation of `app_spec.txt` based on codebase analysis
-      - Auto-generation of `feature_list.json`:
+      - Auto-generation of `.automaker/app_spec.txt` based on codebase analysis
+      - Auto-generation of `.automaker/feature_list.json`:
         - Scans code for implemented features
         - Creates test cases for existing features
         - Marks existing features as "passes": true automatically
     </intelligent_analysis>
 
     <kanban_workflow>
-      - Visual representation of `feature_list.json`
+      - Visual representation of `.automaker/feature_list.json`
       - Columns: Backlog, Planned, In Progress, Review, Verified (Passed), Failed
       - Drag-and-drop interface to reprioritize tasks
       - direct editing of feature details (steps, description) from the card
@@ -69,7 +69,7 @@
         - Ensures visual consistency and aesthetics
       - **The Interviewer**:
         - Interactive chat mode to gather requirements for new projects.
-        - Asks clarifying questions to define the `app_spec.txt`.
+        - Asks clarifying questions to define the `.automaker/app_spec.txt`.
         - Suggests tech stacks and features based on user intent.
       - **The QA Bot**:
         - Runs local tests (Playwright/Jest) in the target project
@@ -89,8 +89,8 @@
     <window_structure>
       - Sidebar: Project List, Settings, Logs, Plugins
       - Main Content:
-        - **Spec View**: Split editor for `app_spec.txt`
-        - **Board View**: Kanban board for `feature_list.json`
+        - **Spec View**: Split editor for `.automaker/app_spec.txt`
+        - **Board View**: Kanban board for `.automaker/feature_list.json`
         - **Code View**: Read-only Monaco editor to see what the agent is writing
         - **Agent View**: Chat-like interface showing agent thought process and tool usage. Also used for the "New Project Interview".
     </window_structure>
@@ -123,7 +123,7 @@
     </phase_2_core_logic>
     <phase_3_kanban_and_interaction>
       - Build Kanban board with drag-and-drop
-      - Connect Kanban state to `feature_list.json` filesystem
+      - Connect Kanban state to `.automaker/feature_list.json` filesystem
       - Implement "Run Feature" capability
       - Integrate standard prompts library
     </phase_3_kanban_and_interaction>
