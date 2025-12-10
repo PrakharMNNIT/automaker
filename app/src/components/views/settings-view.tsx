@@ -50,6 +50,8 @@ import {
 // Navigation items for the side panel
 const NAV_ITEMS = [
   { id: "api-keys", label: "API Keys", icon: Key },
+  { id: "claude", label: "Claude", icon: Terminal },
+  { id: "codex", label: "Codex", icon: Atom },
   { id: "appearance", label: "Appearance", icon: Palette },
   { id: "kanban", label: "Kanban Display", icon: LayoutGrid },
   { id: "defaults", label: "Feature Defaults", icon: FlaskConical },
@@ -710,7 +712,10 @@ export function SettingsView() {
 
           {/* Claude CLI Status Section */}
           {claudeCliStatus && (
-            <div className="rounded-xl border border-border bg-card backdrop-blur-md overflow-hidden">
+            <div
+              id="claude"
+              className="rounded-xl border border-border bg-card backdrop-blur-md overflow-hidden scroll-mt-6"
+            >
               <div className="p-6 border-b border-border">
                 <div className="flex items-center gap-2 mb-2">
                   <Terminal className="w-5 h-5 text-brand-500" />
@@ -790,7 +795,10 @@ export function SettingsView() {
 
           {/* Codex CLI Status Section */}
           {codexCliStatus && (
-            <div className="rounded-xl border border-border bg-card backdrop-blur-md overflow-hidden">
+            <div
+              id="codex"
+              className="rounded-xl border border-border bg-card backdrop-blur-md overflow-hidden scroll-mt-6"
+            >
               <div className="p-6 border-b border-border">
                 <div className="flex items-center gap-2 mb-2">
                   <Terminal className="w-5 h-5 text-green-500" />
