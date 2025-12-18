@@ -9,6 +9,10 @@ import {
   Terminal,
   ZoomIn,
   ZoomOut,
+  Copy,
+  ClipboardPaste,
+  CheckSquare,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -66,6 +70,13 @@ export function TerminalPanel({
   const focusHandlerRef = useRef<{ dispose: () => void } | null>(null);
   const [isTerminalReady, setIsTerminalReady] = useState(false);
   const [shellName, setShellName] = useState("shell");
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [isMac, setIsMac] = useState(false);
+
+  // Detect platform on mount
+  useEffect(() => {
+    setIsMac(navigator.platform.toUpperCase().indexOf("MAC") >= 0);
+  }, []);
 
   // Get effective theme from store
   const getEffectiveTheme = useAppStore((state) => state.getEffectiveTheme);
@@ -84,6 +95,8 @@ export function TerminalPanel({
   fontSizeRef.current = fontSize;
   const themeRef = useRef(effectiveTheme);
   themeRef.current = effectiveTheme;
+  const copySelectionRef = useRef<() => Promise<boolean>>(() => Promise.resolve(false));
+  const pasteFromClipboardRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
   // Zoom functions - use the prop callback
   const zoomIn = useCallback(() => {
@@ -97,6 +110,75 @@ export function TerminalPanel({
   const resetZoom = useCallback(() => {
     onFontSizeChange(DEFAULT_FONT_SIZE);
   }, [onFontSizeChange]);
+
+  // Copy selected text to clipboard
+  const copySelection = useCallback(async (): Promise<boolean> => {
+    const terminal = xtermRef.current;
+    if (!terminal) return false;
+
+    const selection = terminal.getSelection();
+    if (!selection) return false;
+
+    try {
+      await navigator.clipboard.writeText(selection);
+      return true;
+    } catch (err) {
+      console.error("[Terminal] Copy failed:", err);
+      return false;
+    }
+  }, []);
+  copySelectionRef.current = copySelection;
+
+  // Paste from clipboard
+  const pasteFromClipboard = useCallback(async () => {
+    const terminal = xtermRef.current;
+    if (!terminal || !wsRef.current) return;
+
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: "input", data: text }));
+      }
+    } catch (err) {
+      console.error("[Terminal] Paste failed:", err);
+    }
+  }, []);
+  pasteFromClipboardRef.current = pasteFromClipboard;
+
+  // Select all terminal content
+  const selectAll = useCallback(() => {
+    xtermRef.current?.selectAll();
+  }, []);
+
+  // Clear terminal
+  const clearTerminal = useCallback(() => {
+    xtermRef.current?.clear();
+  }, []);
+
+  // Close context menu
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(null);
+  }, []);
+
+  // Handle context menu action
+  const handleContextMenuAction = useCallback(async (action: "copy" | "paste" | "selectAll" | "clear") => {
+    closeContextMenu();
+    switch (action) {
+      case "copy":
+        await copySelection();
+        break;
+      case "paste":
+        await pasteFromClipboard();
+        break;
+      case "selectAll":
+        selectAll();
+        break;
+      case "clear":
+        clearTerminal();
+        break;
+    }
+    xtermRef.current?.focus();
+  }, [closeContextMenu, copySelection, pasteFromClipboard, selectAll, clearTerminal]);
 
   const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL || "http://localhost:3008";
   const wsUrl = serverUrl.replace(/^http/, "ws");
@@ -260,6 +342,44 @@ export function TerminalPanel({
             lastShortcutTimeRef.current = now;
             onCloseRef.current();
           }
+          return false;
+        }
+
+        const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+        const modKey = isMac ? event.metaKey : event.ctrlKey;
+        const otherModKey = isMac ? event.ctrlKey : event.metaKey;
+
+        // Ctrl+Shift+C / Cmd+Shift+C - Always copy (Linux terminal convention)
+        if (modKey && !otherModKey && event.shiftKey && !event.altKey && code === 'KeyC') {
+          event.preventDefault();
+          copySelectionRef.current();
+          return false;
+        }
+
+        // Ctrl+C / Cmd+C - Copy if text is selected, otherwise send SIGINT
+        if (modKey && !otherModKey && !event.shiftKey && !event.altKey && code === 'KeyC') {
+          const hasSelection = terminal.hasSelection();
+          if (hasSelection) {
+            event.preventDefault();
+            copySelectionRef.current();
+            terminal.clearSelection();
+            return false;
+          }
+          // No selection - let xterm handle it (sends SIGINT)
+          return true;
+        }
+
+        // Ctrl+V / Cmd+V or Ctrl+Shift+V / Cmd+Shift+V - Paste
+        if (modKey && !otherModKey && !event.altKey && code === 'KeyV') {
+          event.preventDefault();
+          pasteFromClipboardRef.current();
+          return false;
+        }
+
+        // Ctrl+A / Cmd+A - Select all
+        if (modKey && !otherModKey && !event.shiftKey && !event.altKey && code === 'KeyA') {
+          event.preventDefault();
+          terminal.selectAll();
           return false;
         }
 
@@ -548,6 +668,34 @@ export function TerminalPanel({
     return () => container.removeEventListener("wheel", handleWheel);
   }, [zoomIn, zoomOut]);
 
+  // Close context menu on click outside or scroll
+  useEffect(() => {
+    if (!contextMenu) return;
+
+    const handleClick = () => closeContextMenu();
+    const handleScroll = () => closeContextMenu();
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeContextMenu();
+    };
+
+    document.addEventListener("click", handleClick);
+    document.addEventListener("scroll", handleScroll, true);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("click", handleClick);
+      document.removeEventListener("scroll", handleScroll, true);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [contextMenu, closeContextMenu]);
+
+  // Handle right-click context menu
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  }, []);
+
   // Combine refs for the container
   const setRefs = useCallback((node: HTMLDivElement | null) => {
     containerRef.current = node;
@@ -695,7 +843,50 @@ export function TerminalPanel({
         ref={terminalRef}
         className="flex-1 overflow-hidden"
         style={{ backgroundColor: currentTerminalTheme.background }}
+        onContextMenu={handleContextMenu}
       />
+
+      {/* Context menu */}
+      {contextMenu && (
+        <div
+          className="fixed z-50 min-w-[160px] rounded-md border border-border bg-popover p-1 shadow-md animate-in fade-in-0 zoom-in-95"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-popover-foreground hover:bg-accent hover:text-accent-foreground cursor-default"
+            onClick={() => handleContextMenuAction("copy")}
+          >
+            <Copy className="h-4 w-4" />
+            <span className="flex-1 text-left">Copy</span>
+            <span className="text-xs text-muted-foreground">{isMac ? "⌘C" : "Ctrl+C"}</span>
+          </button>
+          <button
+            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-popover-foreground hover:bg-accent hover:text-accent-foreground cursor-default"
+            onClick={() => handleContextMenuAction("paste")}
+          >
+            <ClipboardPaste className="h-4 w-4" />
+            <span className="flex-1 text-left">Paste</span>
+            <span className="text-xs text-muted-foreground">{isMac ? "⌘V" : "Ctrl+V"}</span>
+          </button>
+          <div className="my-1 h-px bg-border" />
+          <button
+            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-popover-foreground hover:bg-accent hover:text-accent-foreground cursor-default"
+            onClick={() => handleContextMenuAction("selectAll")}
+          >
+            <CheckSquare className="h-4 w-4" />
+            <span className="flex-1 text-left">Select All</span>
+            <span className="text-xs text-muted-foreground">{isMac ? "⌘A" : "Ctrl+A"}</span>
+          </button>
+          <button
+            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-popover-foreground hover:bg-accent hover:text-accent-foreground cursor-default"
+            onClick={() => handleContextMenuAction("clear")}
+          >
+            <Trash2 className="h-4 w-4" />
+            <span className="flex-1 text-left">Clear</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
