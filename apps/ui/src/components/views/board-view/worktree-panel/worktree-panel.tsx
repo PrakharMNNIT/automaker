@@ -21,6 +21,7 @@ export function WorktreePanel({
   onCreatePR,
   onCreateBranch,
   onAddressPRComments,
+  onResolveConflicts,
   onRemovedWorktrees,
   runningFeatureIds = [],
   features = [],
@@ -148,6 +149,7 @@ export function WorktreePanel({
               onCommit={onCommit}
               onCreatePR={onCreatePR}
               onAddressPRComments={onAddressPRComments}
+              onResolveConflicts={onResolveConflicts}
               onDeleteWorktree={onDeleteWorktree}
               onStartDevServer={handleStartDevServer}
               onStopDevServer={handleStopDevServer}
