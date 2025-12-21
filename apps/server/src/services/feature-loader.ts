@@ -143,8 +143,9 @@ export class FeatureLoader {
         }
       } catch (error) {
         logger.error(`Failed to migrate image:`, error);
-        // Keep original path if migration fails
-        updatedPaths.push(imagePath);
+        // Rethrow error to let caller decide how to handle it
+        // Keeping original path could lead to broken references
+        throw error;
       }
     }
 

@@ -13,7 +13,7 @@ export type {
   InstallationStatus,
   ValidationResult,
   ModelDefinition,
-} from './provider';
+} from './provider.js';
 
 // Feature types
 export type {
@@ -21,7 +21,7 @@ export type {
   FeatureImagePath,
   FeatureStatus,
   PlanningMode,
-} from './feature';
+} from './feature.js';
 
 // Session types
 export type {
@@ -29,43 +29,43 @@ export type {
   SessionListItem,
   CreateSessionParams,
   UpdateSessionParams,
-} from './session';
+} from './session.js';
 
 // Error types
 export type {
   ErrorType,
   ErrorInfo,
-} from './error';
+} from './error.js';
 
 // Image types
 export type {
   ImageData,
   ImageContentBlock,
-} from './image';
+} from './image.js';
 
 // Model types and constants
 export {
   CLAUDE_MODEL_MAP,
   DEFAULT_MODELS,
   type ModelAlias,
-} from './model';
+} from './model.js';
 
 // Event types
 export type {
   EventType,
   EventCallback,
-} from './event';
+} from './event.js';
 
 // Spec types
 export type {
   SpecOutput,
-} from './spec';
+} from './spec.js';
 export {
   specOutputSchema,
-} from './spec';
+} from './spec.js';
 
 // Enhancement types
 export type {
   EnhancementMode,
   EnhancementExample,
-} from './enhancement';
+} from './enhancement.js';
