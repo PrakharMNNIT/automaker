@@ -48,7 +48,7 @@ const BOARD_CONTENT_MIN =
   COLUMN_MIN_WIDTH * COLUMN_COUNT + GAP_SIZE * (COLUMN_COUNT - 1) + BOARD_PADDING;
 const MIN_WIDTH_EXPANDED = BOARD_CONTENT_MIN + SIDEBAR_EXPANDED; // 1500px
 const MIN_WIDTH_COLLAPSED = BOARD_CONTENT_MIN + SIDEBAR_COLLAPSED; // 1276px
-const MIN_HEIGHT = 850; // Ensures sidebar content fits without scrolling
+const MIN_HEIGHT = 650; // Ensures sidebar content fits without scrolling
 const DEFAULT_WIDTH = 1600;
 const DEFAULT_HEIGHT = 950;
 

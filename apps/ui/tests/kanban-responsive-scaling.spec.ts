@@ -110,9 +110,9 @@ test.describe('Kanban Responsive Scaling Tests', () => {
           expect(Math.abs(columnWidth - baseWidth)).toBeLessThan(2);
         }
 
-        // Column width should be within expected bounds (280px min, 360px max)
+        // Column width should be at least minimum (280px)
+        // No max-width - columns scale evenly to fill available viewport
         expect(baseWidth).toBeGreaterThanOrEqual(280);
-        expect(baseWidth).toBeLessThanOrEqual(360);
 
         // Columns should not overlap (check x positions)
         expect(inProgressBox.x).toBeGreaterThan(backlogBox.x + backlogBox.width - 5);
@@ -234,12 +234,11 @@ test.describe('Kanban Responsive Scaling Tests', () => {
     // There should be no horizontal scroll at minimum width
     expect(hasHorizontalScroll).toBe(false);
 
-    // Verify columns are at minimum width (280px)
+    // Verify columns are at least minimum width (280px)
     const backlogBox = await backlogColumn.boundingBox();
     expect(backlogBox).not.toBeNull();
     if (backlogBox) {
       expect(backlogBox.width).toBeGreaterThanOrEqual(280);
-      expect(backlogBox.width).toBeLessThanOrEqual(360);
     }
   });
 
@@ -276,9 +275,8 @@ test.describe('Kanban Responsive Scaling Tests', () => {
         // Allow for small variations due to transitions
         expect(collapsedBox.width).toBeGreaterThanOrEqual(initialBox.width - 5);
 
-        // Width should still be within bounds
+        // Width should still be at least minimum
         expect(collapsedBox.width).toBeGreaterThanOrEqual(280);
-        expect(collapsedBox.width).toBeLessThanOrEqual(360);
       }
 
       // Verify no horizontal scrollbar after collapse
