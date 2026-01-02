@@ -744,8 +744,6 @@ Complete the pipeline step instructions above. Review the previous work and appl
     }
 
     // No context, start fresh - executeFeature will handle adding to runningFeatures
-    // Remove the temporary entry we added
-    this.runningFeatures.delete(featureId);
     return this.executeFeature(projectPath, featureId, useWorktrees, false);
   }
 
@@ -794,9 +792,6 @@ Complete the pipeline step instructions above. Review the previous work and appl
       // Reset status to in_progress and start fresh
       await this.updateFeatureStatus(projectPath, featureId, 'in_progress');
 
-      // Remove temporary entry
-      this.runningFeatures.delete(featureId);
-
       return this.executeFeature(projectPath, featureId, useWorktrees, false);
     }
 
@@ -818,8 +813,6 @@ Complete the pipeline step instructions above. Review the previous work and appl
         projectPath,
       });
 
-      // Remove temporary entry
-      this.runningFeatures.delete(featureId);
       return;
     }
 
