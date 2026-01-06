@@ -68,11 +68,20 @@ async function parseAgentFile(
           .filter((t) => t && t !== '')
       : undefined;
 
-    // Parse model (optional)
+    // Parse model (optional) - validate against allowed values
     const modelMatch = frontmatter.match(/model:\s*(\w+)/);
-    const model = modelMatch
-      ? (modelMatch[1].trim() as 'sonnet' | 'opus' | 'haiku' | 'inherit')
-      : undefined;
+    const modelValue = modelMatch?.[1]?.trim();
+    const validModels = ['sonnet', 'opus', 'haiku', 'inherit'] as const;
+    const model =
+      modelValue && validModels.includes(modelValue as (typeof validModels)[number])
+        ? (modelValue as 'sonnet' | 'opus' | 'haiku' | 'inherit')
+        : undefined;
+
+    if (modelValue && !model) {
+      logger.warn(
+        `Invalid model "${modelValue}" in agent file: ${filePath}. Expected one of: ${validModels.join(', ')}`
+      );
+    }
 
     return {
       description,

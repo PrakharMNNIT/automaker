@@ -289,25 +289,12 @@ export class AgentService {
       const maxTurns = sdkOptions.maxTurns;
       let allowedTools = sdkOptions.allowedTools as string[] | undefined;
 
-      // Build merged settingSources array (filter to only 'user' and 'project')
-      const settingSources: Array<'user' | 'project'> = [];
-      if (sdkOptions.settingSources) {
-        sdkOptions.settingSources.forEach((source) => {
-          if (source === 'user' || source === 'project') {
-            if (!settingSources.includes(source)) {
-              settingSources.push(source);
-            }
-          }
-        });
-      }
-      // Merge skills sources (avoid duplicates)
-      if (skillsConfig.enabled && skillsConfig.sources.length > 0) {
-        skillsConfig.sources.forEach((source) => {
-          if (!settingSources.includes(source)) {
-            settingSources.push(source);
-          }
-        });
-      }
+      // Build merged settingSources array using Set for automatic deduplication
+      const sdkSettingSources = (sdkOptions.settingSources ?? []).filter(
+        (source): source is 'user' | 'project' => source === 'user' || source === 'project'
+      );
+      const skillSettingSources = skillsConfig.enabled ? skillsConfig.sources : [];
+      const settingSources = [...new Set([...sdkSettingSources, ...skillSettingSources])];
 
       // Enhance allowedTools with Skills and Subagents tools
       if (allowedTools) {
