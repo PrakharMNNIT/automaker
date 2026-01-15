@@ -1,5 +1,7 @@
 import { createRootRoute, Outlet, useLocation, useNavigate } from '@tanstack/react-router';
 import { useEffect, useState, useCallback, useDeferredValue, useRef } from 'react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { createLogger } from '@automaker/utils/logger';
 import { Sidebar } from '@/components/layout/sidebar';
 import { ProjectSwitcher } from '@/components/layout/project-switcher';
@@ -27,6 +29,7 @@ import {
   signalMigrationComplete,
   performSettingsMigration,
 } from '@/hooks/use-settings-migration';
+import { queryClient } from '@/lib/query-client';
 import { Toaster } from 'sonner';
 import { Menu } from 'lucide-react';
 import { ThemeOption, themeOptions } from '@/config/theme-options';
@@ -856,9 +859,12 @@ function RootLayoutContent() {
 
 function RootLayout() {
   return (
-    <FileBrowserProvider>
-      <RootLayoutContent />
-    </FileBrowserProvider>
+    <QueryClientProvider client={queryClient}>
+      <FileBrowserProvider>
+        <RootLayoutContent />
+      </FileBrowserProvider>
+      <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />
+    </QueryClientProvider>
   );
 }
 
