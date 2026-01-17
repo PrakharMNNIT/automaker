@@ -5,7 +5,7 @@
 import path from 'path';
 import * as secureFs from '../../lib/secure-fs.js';
 import type { EventEmitter } from '../../lib/events.js';
-import { createLogger } from '@automaker/utils';
+import { createLogger, atomicWriteJson, DEFAULT_BACKUP_COUNT } from '@automaker/utils';
 import { getFeaturesDir } from '@automaker/platform';
 import { extractJsonWithArray } from '../../lib/json-extractor.js';
 import { getNotificationService } from '../../services/notification-service.js';
@@ -74,10 +74,10 @@ export async function parseAndCreateFeatures(
         updatedAt: new Date().toISOString(),
       };
 
-      await secureFs.writeFile(
-        path.join(featureDir, 'feature.json'),
-        JSON.stringify(featureData, null, 2)
-      );
+      // Use atomic write with backup support for crash protection
+      await atomicWriteJson(path.join(featureDir, 'feature.json'), featureData, {
+        backupCount: DEFAULT_BACKUP_COUNT,
+      });
 
       createdFeatures.push({ id: feature.id, title: feature.title });
     }

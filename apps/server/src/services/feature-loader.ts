@@ -5,7 +5,13 @@
 
 import path from 'path';
 import type { Feature, DescriptionHistoryEntry } from '@automaker/types';
-import { createLogger } from '@automaker/utils';
+import {
+  createLogger,
+  atomicWriteJson,
+  readJsonWithRecovery,
+  logRecoveryWarning,
+  DEFAULT_BACKUP_COUNT,
+} from '@automaker/utils';
 import * as secureFs from '../lib/secure-fs.js';
 import {
   getFeaturesDir,
@@ -194,31 +200,31 @@ export class FeatureLoader {
       })) as any[];
       const featureDirs = entries.filter((entry) => entry.isDirectory());
 
-      // Load all features concurrently (secureFs has built-in concurrency limiting)
+      // Load all features concurrently with automatic recovery from backups
       const featurePromises = featureDirs.map(async (dir) => {
         const featureId = dir.name;
         const featureJsonPath = this.getFeatureJsonPath(projectPath, featureId);
 
-        try {
-          const content = (await secureFs.readFile(featureJsonPath, 'utf-8')) as string;
-          const feature = JSON.parse(content);
+        // Use recovery-enabled read to handle corrupted files
+        const result = await readJsonWithRecovery<Feature | null>(featureJsonPath, null, {
+          maxBackups: DEFAULT_BACKUP_COUNT,
+          autoRestore: true,
+        });
 
-          if (!feature.id) {
-            logger.warn(`Feature ${featureId} missing required 'id' field, skipping`);
-            return null;
-          }
+        logRecoveryWarning(result, `Feature ${featureId}`, logger);
 
-          return feature as Feature;
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-            return null;
-          } else if (error instanceof SyntaxError) {
-            logger.warn(`Failed to parse feature.json for ${featureId}: ${error.message}`);
-          } else {
-            logger.error(`Failed to load feature ${featureId}:`, (error as Error).message);
-          }
+        const feature = result.data;
+
+        if (!feature) {
           return null;
         }
+
+        if (!feature.id) {
+          logger.warn(`Feature ${featureId} missing required 'id' field, skipping`);
+          return null;
+        }
+
+        return feature;
       });
 
       const results = await Promise.all(featurePromises);
@@ -303,19 +309,20 @@ export class FeatureLoader {
 
   /**
    * Get a single feature by ID
+   * Uses automatic recovery from backups if the main file is corrupted
    */
   async get(projectPath: string, featureId: string): Promise<Feature | null> {
-    try {
-      const featureJsonPath = this.getFeatureJsonPath(projectPath, featureId);
-      const content = (await secureFs.readFile(featureJsonPath, 'utf-8')) as string;
-      return JSON.parse(content);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        return null;
-      }
-      logger.error(`Failed to get feature ${featureId}:`, error);
-      throw error;
-    }
+    const featureJsonPath = this.getFeatureJsonPath(projectPath, featureId);
+
+    // Use recovery-enabled read to handle corrupted files
+    const result = await readJsonWithRecovery<Feature | null>(featureJsonPath, null, {
+      maxBackups: DEFAULT_BACKUP_COUNT,
+      autoRestore: true,
+    });
+
+    logRecoveryWarning(result, `Feature ${featureId}`, logger);
+
+    return result.data;
   }
 
   /**
@@ -359,8 +366,8 @@ export class FeatureLoader {
       descriptionHistory: initialHistory,
     };
 
-    // Write feature.json
-    await secureFs.writeFile(featureJsonPath, JSON.stringify(feature, null, 2), 'utf-8');
+    // Write feature.json atomically with backup support
+    await atomicWriteJson(featureJsonPath, feature, { backupCount: DEFAULT_BACKUP_COUNT });
 
     logger.info(`Created feature ${featureId}`);
     return feature;
@@ -444,9 +451,9 @@ export class FeatureLoader {
       descriptionHistory: updatedHistory,
     };
 
-    // Write back to file
+    // Write back to file atomically with backup support
     const featureJsonPath = this.getFeatureJsonPath(projectPath, featureId);
-    await secureFs.writeFile(featureJsonPath, JSON.stringify(updatedFeature, null, 2), 'utf-8');
+    await atomicWriteJson(featureJsonPath, updatedFeature, { backupCount: DEFAULT_BACKUP_COUNT });
 
     logger.info(`Updated feature ${featureId}`);
     return updatedFeature;

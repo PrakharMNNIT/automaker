@@ -190,9 +190,10 @@ describe('feature-loader.ts', () => {
       const result = await loader.getAll(testProjectPath);
 
       expect(result).toEqual([]);
+      // With recovery-enabled reads, warnings come from AtomicWriter and FeatureLoader
       expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringMatching(/WARN.*\[FeatureLoader\]/),
-        expect.stringContaining('Failed to parse feature.json')
+        expect.stringMatching(/WARN.*\[AtomicWriter\]/),
+        expect.stringContaining('unavailable')
       );
 
       consoleSpy.mockRestore();
@@ -260,10 +261,13 @@ describe('feature-loader.ts', () => {
       expect(result).toBeNull();
     });
 
-    it('should throw on other errors', async () => {
+    it('should return null on other errors (with recovery attempt)', async () => {
+      // With recovery-enabled reads, get() returns null instead of throwing
+      // because it attempts to recover from backups before giving up
       vi.mocked(fs.readFile).mockRejectedValue(new Error('Permission denied'));
 
-      await expect(loader.get(testProjectPath, 'feature-123')).rejects.toThrow('Permission denied');
+      const result = await loader.get(testProjectPath, 'feature-123');
+      expect(result).toBeNull();
     });
   });
 
