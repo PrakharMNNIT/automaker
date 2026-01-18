@@ -172,14 +172,18 @@ export function useSettingsSync(): SettingsSyncState {
       // Never sync when not authenticated or settings not loaded
       // The settingsLoaded flag ensures we don't sync default empty state before hydration
       const auth = useAuthStore.getState();
-      logger.debug('syncToServer check:', {
+      logger.debug('[SYNC_CHECK] Auth state:', {
         authChecked: auth.authChecked,
         isAuthenticated: auth.isAuthenticated,
         settingsLoaded: auth.settingsLoaded,
         projectsCount: useAppStore.getState().projects?.length ?? 0,
       });
       if (!auth.authChecked || !auth.isAuthenticated || !auth.settingsLoaded) {
-        logger.debug('Sync skipped: not authenticated or settings not loaded');
+        logger.warn('[SYNC_SKIPPED] Not ready:', {
+          authChecked: auth.authChecked,
+          isAuthenticated: auth.isAuthenticated,
+          settingsLoaded: auth.settingsLoaded,
+        });
         return;
       }
 
@@ -187,7 +191,9 @@ export function useSettingsSync(): SettingsSyncState {
       const api = getHttpApiClient();
       const appState = useAppStore.getState();
 
-      logger.debug('Syncing to server:', { projectsCount: appState.projects?.length ?? 0 });
+      logger.info('[SYNC_START] Syncing to server:', {
+        projectsCount: appState.projects?.length ?? 0,
+      });
 
       // Build updates object from current state
       const updates: Record<string, unknown> = {};
@@ -204,14 +210,18 @@ export function useSettingsSync(): SettingsSyncState {
       // Create a hash of the updates to avoid redundant syncs
       const updateHash = JSON.stringify(updates);
       if (updateHash === lastSyncedRef.current) {
-        logger.debug('Sync skipped: no changes');
+        logger.debug('[SYNC_SKIP_IDENTICAL] No changes from last sync');
         setState((s) => ({ ...s, syncing: false }));
         return;
       }
 
-      logger.info('Sending settings update:', { projects: updates.projects });
+      logger.info('[SYNC_SEND] Sending settings update to server:', {
+        projects: (updates.projects as any)?.length ?? 0,
+        trashedProjects: (updates.trashedProjects as any)?.length ?? 0,
+      });
 
       const result = await api.settings.updateGlobal(updates);
+      logger.info('[SYNC_RESPONSE] Server response:', { success: result.success });
       if (result.success) {
         lastSyncedRef.current = updateHash;
         logger.debug('Settings synced to server');
@@ -353,9 +363,11 @@ export function useSettingsSync(): SettingsSyncState {
       // This is critical - projects list changes must sync right away to prevent loss
       // when switching between Electron and web modes or closing the app
       if (newState.projects !== prevState.projects) {
-        logger.debug('Projects array changed, syncing immediately', {
+        logger.info('[PROJECTS_CHANGED] Projects array changed, syncing immediately', {
           prevCount: prevState.projects?.length ?? 0,
           newCount: newState.projects?.length ?? 0,
+          prevProjects: prevState.projects?.map((p) => p.name) ?? [],
+          newProjects: newState.projects?.map((p) => p.name) ?? [],
         });
         syncNow();
         return;

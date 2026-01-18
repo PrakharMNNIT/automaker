@@ -91,6 +91,9 @@ const PORT = parseInt(process.env.PORT || '3008', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 const HOSTNAME = process.env.HOSTNAME || 'localhost';
 const DATA_DIR = process.env.DATA_DIR || './data';
+logger.info('[SERVER_STARTUP] process.env.DATA_DIR:', process.env.DATA_DIR);
+logger.info('[SERVER_STARTUP] Resolved DATA_DIR:', DATA_DIR);
+logger.info('[SERVER_STARTUP] process.cwd():', process.cwd());
 const ENABLE_REQUEST_LOGGING_DEFAULT = process.env.ENABLE_REQUEST_LOGGING !== 'false'; // Default to true
 
 // Runtime-configurable request logging flag (can be changed via settings)

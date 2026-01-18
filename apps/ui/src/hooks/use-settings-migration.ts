@@ -120,11 +120,14 @@ export function parseLocalStorageSettings(): Partial<GlobalSettings> | null {
     if (settingsCache) {
       try {
         const cached = JSON.parse(settingsCache) as GlobalSettings;
-        logger.debug('Using fresh settings cache from localStorage');
+        const cacheProjectCount = cached?.projects?.length ?? 0;
+        logger.info(`[CACHE_LOADED] projects=${cacheProjectCount}, theme=${cached?.theme}`);
         return cached;
       } catch (e) {
         logger.warn('Failed to parse settings cache, falling back to old storage');
       }
+    } else {
+      logger.info('[CACHE_EMPTY] No settings cache found in localStorage');
     }
 
     // Fall back to old Zustand persisted storage
@@ -313,12 +316,19 @@ export async function performSettingsMigration(
 ): Promise<{ settings: GlobalSettings; migrated: boolean }> {
   // Get localStorage data
   const localSettings = parseLocalStorageSettings();
-  logger.info(`localStorage has ${localSettings?.projects?.length ?? 0} projects`);
-  logger.info(`Server has ${serverSettings.projects?.length ?? 0} projects`);
+  const localProjects = localSettings?.projects?.length ?? 0;
+  const serverProjects = serverSettings.projects?.length ?? 0;
+
+  logger.info('[MIGRATION_CHECK]', {
+    localStorageProjects: localProjects,
+    serverProjects: serverProjects,
+    localStorageMigrated: serverSettings.localStorageMigrated,
+    dataSourceMismatch: localProjects !== serverProjects,
+  });
 
   // Check if migration has already been completed
   if (serverSettings.localStorageMigrated) {
-    logger.info('localStorage migration already completed, using server settings only');
+    logger.info('[MIGRATION_SKIP] Using server settings only (migration already completed)');
     return { settings: serverSettings, migrated: false };
   }
 
