@@ -35,6 +35,7 @@ import { toast } from 'sonner';
 import { getBlockingDependencies } from '@automaker/dependency-resolver';
 import { BoardBackgroundModal } from '@/components/dialogs/board-background-modal';
 import { Spinner } from '@/components/ui/spinner';
+import { useShallow } from 'zustand/react/shallow';
 import { useAutoMode } from '@/hooks/use-auto-mode';
 import { useKeyboardShortcutsConfig } from '@/hooks/use-keyboard-shortcuts';
 import { useWindowState } from '@/hooks/use-window-state';
@@ -79,6 +80,10 @@ import { SelectionActionBar, ListView } from './board-view/components';
 import { MassEditDialog } from './board-view/dialogs';
 import { InitScriptIndicator } from './board-view/init-script-indicator';
 import { useInitScriptEvents } from '@/hooks/use-init-script-events';
+import { usePipelineConfig } from '@/hooks/queries';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/lib/query-keys';
+import { useAutoModeQueryInvalidation } from '@/hooks/use-query-invalidation';
 
 // Stable empty array to avoid infinite loop in selector
 const EMPTY_WORKTREES: ReturnType<ReturnType<typeof useAppStore.getState>['getWorktrees']> = [];
@@ -108,9 +113,37 @@ export function BoardView() {
     isPrimaryWorktreeBranch,
     getPrimaryWorktreeBranch,
     setPipelineConfig,
-  } = useAppStore();
-  // Subscribe to pipelineConfigByProject to trigger re-renders when it changes
-  const pipelineConfigByProject = useAppStore((state) => state.pipelineConfigByProject);
+  } = useAppStore(
+    useShallow((state) => ({
+      currentProject: state.currentProject,
+      maxConcurrency: state.maxConcurrency,
+      setMaxConcurrency: state.setMaxConcurrency,
+      defaultSkipTests: state.defaultSkipTests,
+      specCreatingForProject: state.specCreatingForProject,
+      setSpecCreatingForProject: state.setSpecCreatingForProject,
+      pendingPlanApproval: state.pendingPlanApproval,
+      setPendingPlanApproval: state.setPendingPlanApproval,
+      updateFeature: state.updateFeature,
+      getCurrentWorktree: state.getCurrentWorktree,
+      setCurrentWorktree: state.setCurrentWorktree,
+      getWorktrees: state.getWorktrees,
+      setWorktrees: state.setWorktrees,
+      useWorktrees: state.useWorktrees,
+      enableDependencyBlocking: state.enableDependencyBlocking,
+      skipVerificationInAutoMode: state.skipVerificationInAutoMode,
+      planUseSelectedWorktreeBranch: state.planUseSelectedWorktreeBranch,
+      addFeatureUseSelectedWorktreeBranch: state.addFeatureUseSelectedWorktreeBranch,
+      isPrimaryWorktreeBranch: state.isPrimaryWorktreeBranch,
+      getPrimaryWorktreeBranch: state.getPrimaryWorktreeBranch,
+      setPipelineConfig: state.setPipelineConfig,
+    }))
+  );
+  // Fetch pipeline config via React Query
+  const { data: pipelineConfig } = usePipelineConfig(currentProject?.path);
+  const queryClient = useQueryClient();
+
+  // Subscribe to auto mode events for React Query cache invalidation
+  useAutoModeQueryInvalidation(currentProject?.path);
   // Subscribe to worktreePanelVisibleByProject to trigger re-renders when it changes
   const worktreePanelVisibleByProject = useAppStore((state) => state.worktreePanelVisibleByProject);
   // Subscribe to showInitScriptIndicatorByProject to trigger re-renders when it changes
@@ -953,9 +986,7 @@ export function BoardView() {
   });
 
   // Build columnFeaturesMap for ListView
-  const pipelineConfig = currentProject?.path
-    ? pipelineConfigByProject[currentProject.path] || null
-    : null;
+  // pipelineConfig is now from usePipelineConfig React Query hook at the top
   const columnFeaturesMap = useMemo(() => {
     const columns = getColumnsWithPipeline(pipelineConfig);
     const map: Record<string, typeof hookFeatures> = {};
@@ -1441,6 +1472,11 @@ export function BoardView() {
           if (!result.success) {
             throw new Error(result.error || 'Failed to save pipeline config');
           }
+          // Invalidate React Query cache to refetch updated config
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.pipeline.config(currentProject.path),
+          });
+          // Also update Zustand for backward compatibility
           setPipelineConfig(currentProject.path, config);
         }}
       />

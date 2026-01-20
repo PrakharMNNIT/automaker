@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Feature, useAppStore } from '@/store/app-store';
+import { useShallow } from 'zustand/react/shallow';
 import { CardBadges, PriorityBadges } from './card-badges';
 import { CardHeaderSection } from './card-header';
 import { CardContentSections } from './card-content-sections';
@@ -61,6 +62,7 @@ interface KanbanCardProps {
   cardBorderEnabled?: boolean;
   cardBorderOpacity?: number;
   isOverlay?: boolean;
+  reduceEffects?: boolean;
   // Selection mode props
   isSelectionMode?: boolean;
   isSelected?: boolean;
@@ -94,12 +96,18 @@ export const KanbanCard = memo(function KanbanCard({
   cardBorderEnabled = true,
   cardBorderOpacity = 100,
   isOverlay,
+  reduceEffects = false,
   isSelectionMode = false,
   isSelected = false,
   onToggleSelect,
   selectionTarget = null,
 }: KanbanCardProps) {
-  const { useWorktrees } = useAppStore();
+  const { useWorktrees, currentProject } = useAppStore(
+    useShallow((state) => ({
+      useWorktrees: state.useWorktrees,
+      currentProject: state.currentProject,
+    }))
+  );
   const [isLifted, setIsLifted] = useState(false);
 
   useLayoutEffect(() => {
@@ -140,9 +148,12 @@ export const KanbanCard = memo(function KanbanCard({
   const hasError = feature.error && !isCurrentAutoTask;
 
   const innerCardClasses = cn(
-    'kanban-card-content h-full relative shadow-sm',
+    'kanban-card-content h-full relative',
+    reduceEffects ? 'shadow-none' : 'shadow-sm',
     'transition-all duration-200 ease-out',
-    isInteractive && 'hover:-translate-y-0.5 hover:shadow-md hover:shadow-black/10 bg-transparent',
+    isInteractive &&
+      !reduceEffects &&
+      'hover:-translate-y-0.5 hover:shadow-md hover:shadow-black/10 bg-transparent',
     !glassmorphism && 'backdrop-blur-[0px]!',
     !isCurrentAutoTask &&
       cardBorderEnabled &&
@@ -215,6 +226,7 @@ export const KanbanCard = memo(function KanbanCard({
         {/* Agent Info Panel */}
         <AgentInfoPanel
           feature={feature}
+          projectPath={currentProject?.path ?? ''}
           contextContent={contextContent}
           summary={summary}
           isCurrentAutoTask={isCurrentAutoTask}
