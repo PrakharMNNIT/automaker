@@ -846,6 +846,8 @@ export interface GlobalSettings {
   sidebarOpen: boolean;
   /** Sidebar layout style ('unified' = modern single sidebar, 'discord' = classic two-sidebar layout) */
   sidebarStyle: SidebarStyle;
+  /** Collapsed state of sidebar navigation sections (key: section label, value: is collapsed) */
+  collapsedNavSections?: Record<string, boolean>;
   /** Whether chat history panel is open */
   chatHistoryOpen: boolean;
 
@@ -1321,6 +1323,7 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   theme: 'dark',
   sidebarOpen: true,
   sidebarStyle: 'unified',
+  collapsedNavSections: {},
   chatHistoryOpen: false,
   maxConcurrency: DEFAULT_MAX_CONCURRENCY,
   defaultSkipTests: true,

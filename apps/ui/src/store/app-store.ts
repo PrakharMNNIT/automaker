@@ -612,6 +612,7 @@ export interface AppState {
   currentView: ViewMode;
   sidebarOpen: boolean;
   sidebarStyle: SidebarStyle; // 'unified' (modern) or 'discord' (classic two-sidebar layout)
+  collapsedNavSections: Record<string, boolean>; // Collapsed state of nav sections (key: section label)
   mobileSidebarHidden: boolean; // Completely hides sidebar on mobile
 
   // Agent Session state (per-project, keyed by project path)
@@ -1049,6 +1050,8 @@ export interface AppActions {
   toggleSidebar: () => void;
   setSidebarOpen: (open: boolean) => void;
   setSidebarStyle: (style: SidebarStyle) => void;
+  setCollapsedNavSections: (sections: Record<string, boolean>) => void;
+  toggleNavSection: (sectionLabel: string) => void;
   toggleMobileSidebarHidden: () => void;
   setMobileSidebarHidden: (hidden: boolean) => void;
 
@@ -1475,6 +1478,7 @@ const initialState: AppState = {
   currentView: 'welcome',
   sidebarOpen: true,
   sidebarStyle: 'unified', // Default to modern unified sidebar
+  collapsedNavSections: {}, // Nav sections expanded by default (sections set their own defaults)
   mobileSidebarHidden: false, // Sidebar visible by default on mobile
   lastSelectedSessionByProject: {},
   theme: getStoredTheme() || 'dark', // Use localStorage theme as initial value, fallback to 'dark'
@@ -1934,6 +1938,14 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
   toggleSidebar: () => set({ sidebarOpen: !get().sidebarOpen }),
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   setSidebarStyle: (style) => set({ sidebarStyle: style }),
+  setCollapsedNavSections: (sections) => set({ collapsedNavSections: sections }),
+  toggleNavSection: (sectionLabel) =>
+    set((state) => ({
+      collapsedNavSections: {
+        ...state.collapsedNavSections,
+        [sectionLabel]: !state.collapsedNavSections[sectionLabel],
+      },
+    })),
   toggleMobileSidebarHidden: () => set({ mobileSidebarHidden: !get().mobileSidebarHidden }),
   setMobileSidebarHidden: (hidden) => set({ mobileSidebarHidden: hidden }),
 
