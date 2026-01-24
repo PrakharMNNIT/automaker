@@ -13,6 +13,7 @@ import { useGuidedPrompts } from '@/hooks/use-guided-prompts';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, ChevronRight, Lightbulb, CheckCheck, Trash2 } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
+import { IdeationSettingsPopover } from './components/ideation-settings-popover';
 import type { IdeaCategory } from '@automaker/types';
 import type { IdeationMode } from '@/store/ideation-store';
 
@@ -75,6 +76,7 @@ function IdeationHeader({
   discardAllReady,
   discardAllCount,
   onDiscardAll,
+  projectPath,
 }: {
   currentMode: IdeationMode;
   selectedCategory: IdeaCategory | null;
@@ -88,6 +90,7 @@ function IdeationHeader({
   discardAllReady: boolean;
   discardAllCount: number;
   onDiscardAll: () => void;
+  projectPath: string;
 }) {
   const { getCategoryById } = useGuidedPrompts();
   const showBackButton = currentMode === 'prompts';
@@ -157,10 +160,13 @@ function IdeationHeader({
             Accept All ({acceptAllCount})
           </Button>
         )}
-        <Button onClick={onGenerateIdeas} className="gap-2">
-          <Lightbulb className="w-4 h-4" />
-          Generate Ideas
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button onClick={onGenerateIdeas} className="gap-2">
+            <Lightbulb className="w-4 h-4" />
+            Generate Ideas
+          </Button>
+          <IdeationSettingsPopover projectPath={projectPath} />
+        </div>
       </div>
     </div>
   );
@@ -282,6 +288,7 @@ export function IdeationView() {
         discardAllReady={discardAllReady}
         discardAllCount={discardAllCount}
         onDiscardAll={handleDiscardAll}
+        projectPath={currentProject.path}
       />
 
       {/* Dashboard - main view */}

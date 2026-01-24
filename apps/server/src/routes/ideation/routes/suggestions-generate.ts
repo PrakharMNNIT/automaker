@@ -4,6 +4,7 @@
 
 import type { Request, Response } from 'express';
 import type { IdeationService } from '../../../services/ideation-service.js';
+import type { IdeationContextSources } from '@automaker/types';
 import { createLogger } from '@automaker/utils';
 import { getErrorMessage, logError } from '../common.js';
 
@@ -12,7 +13,7 @@ const logger = createLogger('ideation:suggestions-generate');
 export function createSuggestionsGenerateHandler(ideationService: IdeationService) {
   return async (req: Request, res: Response): Promise<void> => {
     try {
-      const { projectPath, promptId, category, count } = req.body;
+      const { projectPath, promptId, category, count, contextSources } = req.body;
 
       if (!projectPath) {
         res.status(400).json({ success: false, error: 'projectPath is required' });
@@ -38,7 +39,8 @@ export function createSuggestionsGenerateHandler(ideationService: IdeationServic
         projectPath,
         promptId,
         category,
-        suggestionCount
+        suggestionCount,
+        contextSources as IdeationContextSources | undefined
       );
 
       res.json({
