@@ -63,22 +63,23 @@ export async function startServer(): Promise<void> {
     const rootNodeModules = path.join(__dirname, '../../../node_modules/tsx');
 
     let tsxCliPath: string;
-    // Check for tsx in app bundle paths
+    // Check for tsx in app bundle paths, fallback to require.resolve
+    const serverTsxPath = path.join(serverNodeModules, 'dist/cli.mjs');
+    const rootTsxPath = path.join(rootNodeModules, 'dist/cli.mjs');
+
     try {
-      if (electronAppExists(path.join(serverNodeModules, 'dist/cli.mjs'))) {
-        tsxCliPath = path.join(serverNodeModules, 'dist/cli.mjs');
-      } else if (electronAppExists(path.join(rootNodeModules, 'dist/cli.mjs'))) {
-        tsxCliPath = path.join(rootNodeModules, 'dist/cli.mjs');
+      if (electronAppExists(serverTsxPath)) {
+        tsxCliPath = serverTsxPath;
+      } else if (electronAppExists(rootTsxPath)) {
+        tsxCliPath = rootTsxPath;
       } else {
-        try {
-          tsxCliPath = require.resolve('tsx/cli.mjs', {
-            paths: [path.join(__dirname, '../../server')],
-          });
-        } catch {
-          throw new Error("Could not find tsx. Please run 'npm install' in the server directory.");
-        }
+        // Fallback to require.resolve
+        tsxCliPath = require.resolve('tsx/cli.mjs', {
+          paths: [path.join(__dirname, '../../server')],
+        });
       }
     } catch {
+      // electronAppExists threw or require.resolve failed
       try {
         tsxCliPath = require.resolve('tsx/cli.mjs', {
           paths: [path.join(__dirname, '../../server')],
@@ -93,11 +94,7 @@ export async function startServer(): Promise<void> {
     serverPath = path.join(process.resourcesPath, 'server', 'index.js');
     args = [serverPath];
 
-    try {
-      if (!electronAppExists(serverPath)) {
-        throw new Error(`Server not found at: ${serverPath}`);
-      }
-    } catch {
+    if (!electronAppExists(serverPath)) {
       throw new Error(`Server not found at: ${serverPath}`);
     }
   }
