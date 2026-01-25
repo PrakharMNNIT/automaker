@@ -33,11 +33,8 @@ export interface ChatSession {
   archived: boolean;
 }
 
-// UI-specific: base64-encoded images (not in shared types)
-export interface FeatureImage {
-  id: string;
-  data: string; // base64 encoded
-  mimeType: string;
-  filename: string;
-  size: number;
+// UI-specific: base64-encoded images with required id and size (extends ImageAttachment)
+export interface FeatureImage extends ImageAttachment {
+  id: string; // Required (overrides optional in ImageAttachment)
+  size: number; // Required (overrides optional in ImageAttachment)
 }
