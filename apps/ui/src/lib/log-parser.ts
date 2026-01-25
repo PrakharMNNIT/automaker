@@ -1198,46 +1198,62 @@ function mergeConsecutiveEntries(entries: LogEntry[]): LogEntry[] {
 
 /**
  * Extracts summary content from raw log output
- * Returns the summary text if found, or null if no summary exists
+ * Returns the LAST summary text if found, or null if no summary exists
+ * This ensures we get the most recent/updated summary when multiple exist
  */
 export function extractSummary(rawOutput: string): string | null {
   if (!rawOutput || !rawOutput.trim()) {
     return null;
   }
 
+  // First, clean up any fragmented text from streaming
+  // This handles cases where streaming providers send partial text chunks
+  // that got separated by newlines during accumulation (e.g., "<sum\n\nmary>")
+  const cleanedOutput = cleanFragmentedText(rawOutput);
+
   // Try to find <summary> tags first (preferred format)
-  const summaryTagMatch = rawOutput.match(/<summary>([\s\S]*?)<\/summary>/);
-  if (summaryTagMatch) {
-    return summaryTagMatch[1].trim();
+  // Use matchAll to find ALL occurrences and take the LAST one
+  const summaryTagMatches = [...cleanedOutput.matchAll(/<summary>([\s\S]*?)<\/summary>/gi)];
+  if (summaryTagMatches.length > 0) {
+    // Clean up the extracted summary content as well
+    return cleanFragmentedText(summaryTagMatches[summaryTagMatches.length - 1][1]).trim();
   }
 
-  // Try to find markdown ## Summary section
-  const summaryHeaderMatch = rawOutput.match(/^##\s+Summary\s*\n([\s\S]*?)(?=\n##\s+|$)/m);
-  if (summaryHeaderMatch) {
-    return summaryHeaderMatch[1].trim();
+  // Try to find markdown ## Summary section - find all and take the last
+  // Stop at same-level ## sections (but not ###), or tool markers, or end
+  const summaryHeaderMatches = [
+    ...cleanedOutput.matchAll(/^##\s+Summary[^\n]*\n([\s\S]*?)(?=\n##\s+[^#]|\n🔧|$)/gm),
+  ];
+  if (summaryHeaderMatches.length > 0) {
+    return cleanFragmentedText(summaryHeaderMatches[summaryHeaderMatches.length - 1][1]).trim();
   }
 
-  // Try other summary formats (Feature, Changes, Implementation)
-  const otherHeaderMatch = rawOutput.match(
-    /^##\s+(Feature|Changes|Implementation)\s*\n([\s\S]*?)(?=\n##\s+|$)/m
-  );
-  if (otherHeaderMatch) {
-    return `## ${otherHeaderMatch[1]}\n${otherHeaderMatch[2].trim()}`;
+  // Try other summary formats (Feature, Changes, Implementation) - find all and take the last
+  const otherHeaderMatches = [
+    ...cleanedOutput.matchAll(
+      /^##\s+(Feature|Changes|Implementation)[^\n]*\n([\s\S]*?)(?=\n##\s+[^#]|\n🔧|$)/gm
+    ),
+  ];
+  if (otherHeaderMatches.length > 0) {
+    const lastMatch = otherHeaderMatches[otherHeaderMatches.length - 1];
+    return cleanFragmentedText(`## ${lastMatch[1]}\n${lastMatch[2]}`).trim();
   }
 
-  // Try to find summary introduction lines
-  const introMatch = rawOutput.match(
-    /(^|\n)(All tasks completed[\s\S]*?)(?=\n🔧|\n📋|\n⚡|\n❌|$)/
-  );
-  if (introMatch) {
-    return introMatch[2].trim();
+  // Try to find summary introduction lines - find all and take the last
+  const introMatches = [
+    ...cleanedOutput.matchAll(/(^|\n)(All tasks completed[\s\S]*?)(?=\n🔧|\n📋|\n⚡|\n❌|$)/g),
+  ];
+  if (introMatches.length > 0) {
+    return cleanFragmentedText(introMatches[introMatches.length - 1][2]).trim();
   }
 
-  const completionMatch = rawOutput.match(
-    /(^|\n)((I've|I have) (successfully |now )?(completed|finished|implemented)[\s\S]*?)(?=\n🔧|\n📋|\n⚡|\n❌|$)/
-  );
-  if (completionMatch) {
-    return completionMatch[2].trim();
+  const completionMatches = [
+    ...cleanedOutput.matchAll(
+      /(^|\n)((I've|I have) (successfully |now )?(completed|finished|implemented)[\s\S]*?)(?=\n🔧|\n📋|\n⚡|\n❌|$)/g
+    ),
+  ];
+  if (completionMatches.length > 0) {
+    return cleanFragmentedText(completionMatches[completionMatches.length - 1][2]).trim();
   }
 
   return null;

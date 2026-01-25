@@ -237,39 +237,46 @@ function cleanFragmentedText(content: string): string {
 /**
  * Extracts a summary from completed feature context
  * Looks for content between <summary> and </summary> tags
+ * Returns the LAST summary found to ensure we get the most recent/updated one
  */
 function extractSummary(content: string): string | undefined {
   // First, clean up any fragmented text from streaming
   const cleanedContent = cleanFragmentedText(content);
 
-  // Look for <summary> tags - capture everything between opening and closing tags
-  const summaryTagMatch = cleanedContent.match(/<summary>([\s\S]*?)<\/summary>/i);
-  if (summaryTagMatch) {
+  // Look for <summary> tags - find ALL occurrences and take the LAST one
+  const summaryTagMatches = [...cleanedContent.matchAll(/<summary>([\s\S]*?)<\/summary>/gi)];
+  if (summaryTagMatches.length > 0) {
     // Clean up the extracted summary content as well
-    return cleanFragmentedText(summaryTagMatch[1]).trim();
+    return cleanFragmentedText(summaryTagMatches[summaryTagMatches.length - 1][1]).trim();
   }
 
-  // Fallback: Look for summary sections - capture everything including subsections (###)
+  // Fallback: Look for summary sections - find all and take the last
   // Stop at same-level ## sections (but not ###), or tool markers, or end
-  const summaryMatch = cleanedContent.match(/## Summary[^\n]*\n([\s\S]*?)(?=\n## [^#]|\n🔧|$)/i);
-  if (summaryMatch) {
-    return cleanFragmentedText(summaryMatch[1]).trim();
+  const summaryMatches = [
+    ...cleanedContent.matchAll(/## Summary[^\n]*\n([\s\S]*?)(?=\n## [^#]|\n🔧|$)/gi),
+  ];
+  if (summaryMatches.length > 0) {
+    return cleanFragmentedText(summaryMatches[summaryMatches.length - 1][1]).trim();
   }
 
-  // Look for completion markers and extract surrounding text
-  const completionMatch = cleanedContent.match(
-    /✓ (?:Feature|Verification|Task) (?:successfully|completed|verified)[^\n]*(?:\n[^\n]{1,200})?/i
-  );
-  if (completionMatch) {
-    return cleanFragmentedText(completionMatch[0]).trim();
+  // Look for completion markers and extract surrounding text - find all and take the last
+  const completionMatches = [
+    ...cleanedContent.matchAll(
+      /✓ (?:Feature|Verification|Task) (?:successfully|completed|verified)[^\n]*(?:\n[^\n]{1,200})?/gi
+    ),
+  ];
+  if (completionMatches.length > 0) {
+    return cleanFragmentedText(completionMatches[completionMatches.length - 1][0]).trim();
   }
 
-  // Look for "What was done" type sections
-  const whatWasDoneMatch = cleanedContent.match(
-    /(?:What was done|Changes made|Implemented)[^\n]*\n([\s\S]*?)(?=\n## [^#]|\n🔧|$)/i
-  );
-  if (whatWasDoneMatch) {
-    return cleanFragmentedText(whatWasDoneMatch[1]).trim();
+  // Look for "What was done" type sections - find all and take the last
+  const whatWasDoneMatches = [
+    ...cleanedContent.matchAll(
+      /(?:What was done|Changes made|Implemented)[^\n]*\n([\s\S]*?)(?=\n## [^#]|\n🔧|$)/gi
+    ),
+  ];
+  if (whatWasDoneMatches.length > 0) {
+    return cleanFragmentedText(whatWasDoneMatches[whatWasDoneMatches.length - 1][1]).trim();
   }
 
   return undefined;
