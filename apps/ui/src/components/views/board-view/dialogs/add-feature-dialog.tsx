@@ -28,7 +28,7 @@ import { cn } from '@/lib/utils';
 import { modelSupportsThinking } from '@/lib/utils';
 import { useAppStore, ThinkingLevel, FeatureImage, PlanningMode, Feature } from '@/store/app-store';
 import type { ReasoningEffort, PhaseModelEntry, AgentModel } from '@automaker/types';
-import { supportsReasoningEffort } from '@automaker/types';
+import { supportsReasoningEffort, isAdaptiveThinkingModel } from '@automaker/types';
 import {
   PrioritySelector,
   WorkModeSelector,
@@ -266,8 +266,7 @@ export function AddFeatureDialog({
   const handleModelChange = (entry: PhaseModelEntry) => {
     // Normalize thinking level when switching between adaptive and non-adaptive models
     const isNewModelAdaptive =
-      entry.model === 'claude-opus' ||
-      (typeof entry.model === 'string' && entry.model.includes('opus-4-6'));
+      typeof entry.model === 'string' && isAdaptiveThinkingModel(entry.model);
     const currentLevel = entry.thinkingLevel || 'none';
 
     if (isNewModelAdaptive && currentLevel !== 'none' && currentLevel !== 'adaptive') {

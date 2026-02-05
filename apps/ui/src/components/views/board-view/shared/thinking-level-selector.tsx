@@ -46,7 +46,7 @@ export function ThinkingLevelSelector({
         ))}
       </div>
       <p className="text-xs text-muted-foreground">
-        {model && getThinkingLevelsForModel(model).includes('adaptive')
+        {levels.includes('adaptive')
           ? 'Adaptive thinking lets the model decide how much reasoning to use.'
           : 'Higher levels give more time to reason through complex problems.'}
       </p>
