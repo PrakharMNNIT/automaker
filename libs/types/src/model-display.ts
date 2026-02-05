@@ -149,6 +149,7 @@ export const THINKING_LEVELS: ThinkingLevelOption[] = [
   { id: 'medium', label: 'Medium' },
   { id: 'high', label: 'High' },
   { id: 'ultrathink', label: 'Ultrathink' },
+  { id: 'adaptive', label: 'Adaptive' },
 ];
 
 /**
@@ -162,6 +163,7 @@ export const THINKING_LEVEL_LABELS: Record<ThinkingLevel, string> = {
   medium: 'Med',
   high: 'High',
   ultrathink: 'Ultra',
+  adaptive: 'Adaptive',
 };
 
 /**

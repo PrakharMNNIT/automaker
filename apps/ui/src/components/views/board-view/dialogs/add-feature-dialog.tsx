@@ -264,7 +264,21 @@ export function AddFeatureDialog({
   }, [planningMode]);
 
   const handleModelChange = (entry: PhaseModelEntry) => {
-    setModelEntry(entry);
+    // Normalize thinking level when switching between adaptive and non-adaptive models
+    const isNewModelAdaptive =
+      entry.model === 'claude-opus' ||
+      (typeof entry.model === 'string' && entry.model.includes('opus-4-6'));
+    const currentLevel = entry.thinkingLevel || 'none';
+
+    if (isNewModelAdaptive && currentLevel !== 'none' && currentLevel !== 'adaptive') {
+      // Switching TO Opus 4.6 with a manual level -> auto-switch to 'adaptive'
+      setModelEntry({ ...entry, thinkingLevel: 'adaptive' });
+    } else if (!isNewModelAdaptive && currentLevel === 'adaptive') {
+      // Switching FROM Opus 4.6 with adaptive -> auto-switch to 'high'
+      setModelEntry({ ...entry, thinkingLevel: 'high' });
+    } else {
+      setModelEntry(entry);
+    }
   };
 
   const buildFeatureData = (): FeatureData | null => {
