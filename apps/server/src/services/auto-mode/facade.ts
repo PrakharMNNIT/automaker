@@ -49,15 +49,6 @@ const execAsync = promisify(exec);
 const logger = createLogger('AutoModeServiceFacade');
 
 /**
- * Generate a unique key for worktree-scoped auto loop state
- * (mirrors the function in AutoModeService for status lookups)
- */
-function getWorktreeAutoLoopKey(projectPath: string, branchName: string | null): string {
-  const normalizedBranch = branchName === 'main' ? null : branchName;
-  return `${projectPath}::${normalizedBranch ?? '__main__'}`;
-}
-
-/**
  * AutoModeServiceFacade provides a clean interface for auto-mode functionality.
  *
  * Created via factory pattern with a specific projectPath, allowing methods
@@ -240,18 +231,22 @@ export class AutoModeServiceFacade {
       // Callbacks
       (pPath, featureId, useWorktrees, isAutoMode) =>
         facadeInstance!.executeFeature(featureId, useWorktrees, isAutoMode),
-      (pPath, branchName) =>
-        featureLoader
-          .getAll(pPath)
-          .then((features) =>
-            features.filter(
-              (f) =>
-                (f.status === 'backlog' || f.status === 'ready') &&
-                (branchName === null
-                  ? !f.branchName || f.branchName === 'main'
-                  : f.branchName === branchName)
-            )
-          ),
+      async (pPath, branchName) => {
+        const features = await featureLoader.getAll(pPath);
+        // For main worktree (branchName === null), resolve the actual primary branch name
+        // so features with branchName matching the primary branch are included
+        let primaryBranch: string | null = null;
+        if (branchName === null) {
+          primaryBranch = await worktreeResolver.getCurrentBranch(pPath);
+        }
+        return features.filter(
+          (f) =>
+            (f.status === 'backlog' || f.status === 'ready') &&
+            (branchName === null
+              ? !f.branchName || (primaryBranch && f.branchName === primaryBranch)
+              : f.branchName === branchName)
+        );
+      },
       (pPath, branchName, maxConcurrency) =>
         facadeInstance!.saveExecutionStateForProject(branchName, maxConcurrency),
       (pPath, branchName) => facadeInstance!.clearExecutionState(branchName),

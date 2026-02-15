@@ -66,18 +66,22 @@ export class GlobalAutoModeService {
         );
       },
       // getBacklogFeaturesFn
-      (pPath, branchName) =>
-        featureLoader
-          .getAll(pPath)
-          .then((features) =>
-            features.filter(
-              (f) =>
-                (f.status === 'backlog' || f.status === 'ready') &&
-                (branchName === null
-                  ? !f.branchName || f.branchName === 'main'
-                  : f.branchName === branchName)
-            )
-          ),
+      async (pPath, branchName) => {
+        const features = await featureLoader.getAll(pPath);
+        // For main worktree (branchName === null), resolve the actual primary branch name
+        // so features with branchName matching the primary branch are included
+        let primaryBranch: string | null = null;
+        if (branchName === null) {
+          primaryBranch = await this.worktreeResolver.getCurrentBranch(pPath);
+        }
+        return features.filter(
+          (f) =>
+            (f.status === 'backlog' || f.status === 'ready') &&
+            (branchName === null
+              ? !f.branchName || (primaryBranch && f.branchName === primaryBranch)
+              : f.branchName === branchName)
+        );
+      },
       // saveExecutionStateFn - placeholder
       async () => {},
       // clearExecutionStateFn - placeholder
