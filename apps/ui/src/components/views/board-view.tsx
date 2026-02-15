@@ -1362,10 +1362,16 @@ export function BoardView() {
           if (enabled) {
             autoMode.start().catch((error) => {
               logger.error('[AutoMode] Failed to start:', error);
+              toast.error('Failed to start auto mode', {
+                description: error instanceof Error ? error.message : 'Unknown error',
+              });
             });
           } else {
             autoMode.stop().catch((error) => {
               logger.error('[AutoMode] Failed to stop:', error);
+              toast.error('Failed to stop auto mode', {
+                description: error instanceof Error ? error.message : 'Unknown error',
+              });
             });
           }
         }}

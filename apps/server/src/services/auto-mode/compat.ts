@@ -22,6 +22,7 @@ import type { FacadeOptions, AutoModeStatus, RunningAgentInfo } from './types.js
 export class AutoModeServiceCompat {
   private readonly globalService: GlobalAutoModeService;
   private readonly facadeOptions: FacadeOptions;
+  private readonly facadeCache = new Map<string, AutoModeServiceFacade>();
 
   constructor(
     events: EventEmitter,
@@ -47,10 +48,17 @@ export class AutoModeServiceCompat {
   }
 
   /**
-   * Create a facade for a specific project
+   * Get or create a facade for a specific project.
+   * Facades are cached by project path so that auto loop state
+   * (stored in the facade's AutoLoopCoordinator) persists across API calls.
    */
   createFacade(projectPath: string): AutoModeServiceFacade {
-    return AutoModeServiceFacade.create(projectPath, this.facadeOptions);
+    let facade = this.facadeCache.get(projectPath);
+    if (!facade) {
+      facade = AutoModeServiceFacade.create(projectPath, this.facadeOptions);
+      this.facadeCache.set(projectPath, facade);
+    }
+    return facade;
   }
 
   // ===========================================================================
