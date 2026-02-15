@@ -882,7 +882,15 @@ export function BoardView() {
 
       // Capture existing feature IDs before adding
       const featuresBeforeIds = new Set(useAppStore.getState().features.map((f) => f.id));
-      await handleAddFeature(featureData);
+      try {
+        await handleAddFeature(featureData);
+      } catch (error) {
+        logger.error('Failed to create PR comments feature:', error);
+        toast.error('Failed to create feature', {
+          description: error instanceof Error ? error.message : 'An error occurred',
+        });
+        return;
+      }
 
       // Find the newly created feature by looking for an ID that wasn't in the original set
       const latestFeatures = useAppStore.getState().features;
@@ -913,7 +921,7 @@ export function BoardView() {
 
       // Create the feature
       const featureData = {
-        title: `Resolve Merge Conflicts`,
+        title: `Resolve Merge Conflicts: ${remoteBranch} → ${worktree.branch}`,
         category: 'Maintenance',
         description,
         images: [],
@@ -930,7 +938,15 @@ export function BoardView() {
 
       // Capture existing feature IDs before adding
       const featuresBeforeIds = new Set(useAppStore.getState().features.map((f) => f.id));
-      await handleAddFeature(featureData);
+      try {
+        await handleAddFeature(featureData);
+      } catch (error) {
+        logger.error('Failed to create resolve conflicts feature:', error);
+        toast.error('Failed to create feature', {
+          description: error instanceof Error ? error.message : 'An error occurred',
+        });
+        return;
+      }
 
       // Find the newly created feature by looking for an ID that wasn't in the original set
       const latestFeatures = useAppStore.getState().features;
@@ -972,7 +988,15 @@ export function BoardView() {
 
       // Capture existing feature IDs before adding
       const featuresBeforeIds = new Set(useAppStore.getState().features.map((f) => f.id));
-      await handleAddFeature(featureData);
+      try {
+        await handleAddFeature(featureData);
+      } catch (error) {
+        logger.error('Failed to create merge conflict resolution feature:', error);
+        toast.error('Failed to create feature', {
+          description: error instanceof Error ? error.message : 'An error occurred',
+        });
+        return;
+      }
 
       // Find the newly created feature by looking for an ID that wasn't in the original set
       const latestFeatures = useAppStore.getState().features;
@@ -995,7 +1019,15 @@ export function BoardView() {
     async (featureData: Parameters<typeof handleAddFeature>[0]) => {
       // Capture existing feature IDs before adding
       const featuresBeforeIds = new Set(useAppStore.getState().features.map((f) => f.id));
-      await handleAddFeature(featureData);
+      try {
+        await handleAddFeature(featureData);
+      } catch (error) {
+        logger.error('Failed to create feature:', error);
+        toast.error('Failed to create feature', {
+          description: error instanceof Error ? error.message : 'An error occurred',
+        });
+        return;
+      }
 
       // Find the newly created feature by looking for an ID that wasn't in the original set
       const latestFeatures = useAppStore.getState().features;
