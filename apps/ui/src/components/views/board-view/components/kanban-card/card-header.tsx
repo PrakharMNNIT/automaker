@@ -1,5 +1,6 @@
 // @ts-nocheck - header component props with optional handlers and status variants
 import { memo, useState } from 'react';
+import type { DraggableAttributes, DraggableSyntheticListeners } from '@dnd-kit/core';
 import { Feature } from '@/store/app-store';
 import { cn } from '@/lib/utils';
 import { CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -35,6 +36,8 @@ interface CardHeaderProps {
   onDelete: () => void;
   onViewOutput?: () => void;
   onSpawnTask?: () => void;
+  dragHandleListeners?: DraggableSyntheticListeners;
+  dragHandleAttributes?: DraggableAttributes;
 }
 
 export const CardHeaderSection = memo(function CardHeaderSection({
@@ -46,6 +49,8 @@ export const CardHeaderSection = memo(function CardHeaderSection({
   onDelete,
   onViewOutput,
   onSpawnTask,
+  dragHandleListeners,
+  dragHandleAttributes,
 }: CardHeaderProps) {
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -126,35 +131,39 @@ export const CardHeaderSection = memo(function CardHeaderSection({
         </div>
       )}
 
-      {/* Backlog header */}
-      {!isCurrentAutoTask && !isSelectionMode && feature.status === 'backlog' && (
-        <div className="absolute top-2 right-2 flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 w-6 p-0 hover:bg-white/10 text-muted-foreground hover:text-foreground"
-            onClick={(e) => {
-              e.stopPropagation();
-              onSpawnTask?.();
-            }}
-            onPointerDown={(e) => e.stopPropagation()}
-            data-testid={`spawn-backlog-${feature.id}`}
-            title="Spawn Sub-Task"
-          >
-            <GitFork className="w-4 h-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 w-6 p-0 hover:bg-white/10 text-muted-foreground hover:text-destructive"
-            onClick={handleDeleteClick}
-            onPointerDown={(e) => e.stopPropagation()}
-            data-testid={`delete-backlog-${feature.id}`}
-          >
-            <Trash2 className="w-4 h-4" />
-          </Button>
-        </div>
-      )}
+      {/* Backlog header (also handles 'interrupted' and 'ready' statuses that display in backlog column) */}
+      {!isCurrentAutoTask &&
+        !isSelectionMode &&
+        (feature.status === 'backlog' ||
+          feature.status === 'interrupted' ||
+          feature.status === 'ready') && (
+          <div className="absolute top-2 right-2 flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 hover:bg-white/10 text-muted-foreground hover:text-foreground"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSpawnTask?.();
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              data-testid={`spawn-backlog-${feature.id}`}
+              title="Spawn Sub-Task"
+            >
+              <GitFork className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 hover:bg-white/10 text-muted-foreground hover:text-destructive"
+              onClick={handleDeleteClick}
+              onPointerDown={(e) => e.stopPropagation()}
+              data-testid={`delete-backlog-${feature.id}`}
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
 
       {/* Waiting approval / Verified header */}
       {!isCurrentAutoTask &&
@@ -315,8 +324,10 @@ export const CardHeaderSection = memo(function CardHeaderSection({
       <div className="flex items-start gap-2">
         {isDraggable && (
           <div
-            className="-ml-2 -mt-1 p-2 touch-none opacity-40 hover:opacity-70 transition-opacity"
+            className="-ml-2 -mt-1 p-2 touch-none cursor-grab active:cursor-grabbing opacity-40 hover:opacity-70 transition-opacity"
             data-testid={`drag-handle-${feature.id}`}
+            {...dragHandleAttributes}
+            {...dragHandleListeners}
           >
             <GripVertical className="w-3.5 h-3.5 text-muted-foreground" />
           </div>

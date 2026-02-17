@@ -213,7 +213,7 @@ export type PlanningMode = 'skip' | 'lite' | 'spec' | 'full';
 export type ServerLogLevel = 'error' | 'warn' | 'info' | 'debug';
 
 /** ThinkingLevel - Extended thinking levels for Claude models (reasoning intensity) */
-export type ThinkingLevel = 'none' | 'low' | 'medium' | 'high' | 'ultrathink';
+export type ThinkingLevel = 'none' | 'low' | 'medium' | 'high' | 'ultrathink' | 'adaptive';
 
 /**
  * SidebarStyle - Sidebar layout style options
@@ -237,6 +237,7 @@ export const THINKING_TOKEN_BUDGET: Record<ThinkingLevel, number | undefined> = 
   medium: 10000, // Light reasoning
   high: 16000, // Complex tasks (recommended starting point)
   ultrathink: 32000, // Maximum safe (above this risks timeouts)
+  adaptive: undefined, // Adaptive thinking (Opus 4.6) - SDK handles token allocation
 };
 
 /**
@@ -245,6 +246,26 @@ export const THINKING_TOKEN_BUDGET: Record<ThinkingLevel, number | undefined> = 
 export function getThinkingTokenBudget(level: ThinkingLevel | undefined): number | undefined {
   if (!level || level === 'none') return undefined;
   return THINKING_TOKEN_BUDGET[level];
+}
+
+/**
+ * Check if a model uses adaptive thinking (Opus 4.6+)
+ * Adaptive thinking models let the SDK decide token allocation automatically.
+ */
+export function isAdaptiveThinkingModel(model: string): boolean {
+  return model.includes('opus-4-6') || model === 'claude-opus';
+}
+
+/**
+ * Get the available thinking levels for a given model.
+ * - Opus 4.6: Only 'none' and 'adaptive' (SDK handles token allocation)
+ * - Others: Full range of manual thinking levels
+ */
+export function getThinkingLevelsForModel(model: string): ThinkingLevel[] {
+  if (isAdaptiveThinkingModel(model)) {
+    return ['none', 'adaptive'];
+  }
+  return ['none', 'low', 'medium', 'high', 'ultrathink'];
 }
 
 /** ModelProvider - AI model provider for credentials and API key management */
@@ -466,7 +487,7 @@ export const CLAUDE_PROVIDER_TEMPLATES: ClaudeCompatibleProviderTemplate[] = [
     defaultModels: [
       { id: 'GLM-4.5-Air', displayName: 'GLM 4.5 Air', mapsToClaudeModel: 'haiku' },
       { id: 'GLM-4.7', displayName: 'GLM 4.7', mapsToClaudeModel: 'sonnet' },
-      { id: 'GLM-4.7', displayName: 'GLM 4.7', mapsToClaudeModel: 'opus' },
+      { id: 'GLM-5', displayName: 'GLM 5', mapsToClaudeModel: 'opus' },
     ],
   },
   {
@@ -549,7 +570,7 @@ export const CLAUDE_API_PROFILE_TEMPLATES: ClaudeApiProfileTemplate[] = [
     modelMappings: {
       haiku: 'GLM-4.5-Air',
       sonnet: 'GLM-4.7',
-      opus: 'GLM-4.7',
+      opus: 'GLM-5',
     },
     disableNonessentialTraffic: true,
     description: '3× usage at fraction of cost via GLM Coding Plan',
