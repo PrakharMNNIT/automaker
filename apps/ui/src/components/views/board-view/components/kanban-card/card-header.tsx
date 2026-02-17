@@ -206,7 +206,6 @@ export const CardHeaderSection = memo(function CardHeaderSection({
         !isSelectionMode &&
         (feature.status === 'backlog' ||
           feature.status === 'interrupted' ||
-          // @ts-expect-error 'ready' is a valid runtime status used for backlog display but not in FeatureStatusWithPipeline union
           feature.status === 'ready') && (
           <div className="absolute top-2 right-2 flex items-center gap-1">
             <Button
