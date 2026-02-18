@@ -197,11 +197,23 @@ export function WorktreeActionsDropdown({
 
   // Check git operations availability
   const canPerformGitOps = gitRepoStatus.isGitRepo && gitRepoStatus.hasCommits;
-  const gitOpsDisabledReason = !gitRepoStatus.isGitRepo
-    ? 'Not a git repository'
-    : !gitRepoStatus.hasCommits
-      ? 'Repository has no commits yet'
-      : null;
+  // While git status is loading, treat git ops as unavailable to avoid stale state enabling actions
+  const isGitOpsAvailable = !isLoadingGitStatus && canPerformGitOps;
+  const gitOpsDisabledReason = isLoadingGitStatus
+    ? 'Checking git status...'
+    : !gitRepoStatus.isGitRepo
+      ? 'Not a git repository'
+      : !gitRepoStatus.hasCommits
+        ? 'Repository has no commits yet'
+        : null;
+
+  // Determine if the changes/PR section has any visible items
+  const showCreatePR = (!worktree.isMain || worktree.hasChanges) && !hasPR;
+  const showPRInfo = hasPR && !!worktree.pr;
+  const hasChangesSectionContent = worktree.hasChanges || showCreatePR || showPRInfo;
+
+  // Determine if the destructive/bottom section has any visible items
+  const hasDestructiveSectionContent = worktree.hasChanges || !worktree.isMain;
 
   return (
     <DropdownMenu onOpenChange={onOpenChange}>
@@ -232,7 +244,7 @@ export function WorktreeActionsDropdown({
           </>
         )}
         {/* Warning label when git operations are not available (only show once loaded) */}
-        {!isLoadingGitStatus && !canPerformGitOps && (
+        {!isLoadingGitStatus && !isGitOpsAvailable && (
           <>
             <DropdownMenuLabel className="text-xs flex items-center gap-2 text-amber-600 dark:text-amber-400">
               <AlertCircle className="w-3.5 h-3.5" />
@@ -362,14 +374,16 @@ export function WorktreeActionsDropdown({
         )}
         <TooltipWrapper showTooltip={!!gitOpsDisabledReason} tooltipContent={gitOpsDisabledReason}>
           <DropdownMenuItem
-            onClick={() => canPerformGitOps && onPull(worktree)}
-            disabled={isPulling || !canPerformGitOps}
-            className={cn('text-xs', !canPerformGitOps && 'opacity-50 cursor-not-allowed')}
+            onClick={() => isGitOpsAvailable && onPull(worktree)}
+            disabled={isPulling || !isGitOpsAvailable}
+            className={cn('text-xs', !isGitOpsAvailable && 'opacity-50 cursor-not-allowed')}
           >
             <Download className={cn('w-3.5 h-3.5 mr-2', isPulling && 'animate-pulse')} />
             {isPulling ? 'Pulling...' : 'Pull'}
-            {!canPerformGitOps && <AlertCircle className="w-3 h-3 ml-auto text-muted-foreground" />}
-            {canPerformGitOps && behindCount > 0 && (
+            {!isGitOpsAvailable && (
+              <AlertCircle className="w-3 h-3 ml-auto text-muted-foreground" />
+            )}
+            {isGitOpsAvailable && behindCount > 0 && (
               <span className="ml-auto text-[10px] bg-muted px-1.5 py-0.5 rounded">
                 {behindCount} behind
               </span>
@@ -379,26 +393,28 @@ export function WorktreeActionsDropdown({
         <TooltipWrapper showTooltip={!!gitOpsDisabledReason} tooltipContent={gitOpsDisabledReason}>
           <DropdownMenuItem
             onClick={() => {
-              if (!canPerformGitOps) return;
+              if (!isGitOpsAvailable) return;
               if (!hasRemoteBranch) {
                 onPushNewBranch(worktree);
               } else {
                 onPush(worktree);
               }
             }}
-            disabled={isPushing || (hasRemoteBranch && aheadCount === 0) || !canPerformGitOps}
-            className={cn('text-xs', !canPerformGitOps && 'opacity-50 cursor-not-allowed')}
+            disabled={isPushing || (hasRemoteBranch && aheadCount === 0) || !isGitOpsAvailable}
+            className={cn('text-xs', !isGitOpsAvailable && 'opacity-50 cursor-not-allowed')}
           >
             <Upload className={cn('w-3.5 h-3.5 mr-2', isPushing && 'animate-pulse')} />
             {isPushing ? 'Pushing...' : 'Push'}
-            {!canPerformGitOps && <AlertCircle className="w-3 h-3 ml-auto text-muted-foreground" />}
-            {canPerformGitOps && !hasRemoteBranch && (
+            {!isGitOpsAvailable && (
+              <AlertCircle className="w-3 h-3 ml-auto text-muted-foreground" />
+            )}
+            {isGitOpsAvailable && !hasRemoteBranch && (
               <span className="ml-auto inline-flex items-center gap-0.5 text-[10px] bg-amber-500/20 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded">
                 <CloudOff className="w-2.5 h-2.5" />
                 local only
               </span>
             )}
-            {canPerformGitOps && hasRemoteBranch && aheadCount > 0 && (
+            {isGitOpsAvailable && hasRemoteBranch && aheadCount > 0 && (
               <span className="ml-auto text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded">
                 {aheadCount} ahead
               </span>
@@ -407,27 +423,31 @@ export function WorktreeActionsDropdown({
         </TooltipWrapper>
         <TooltipWrapper showTooltip={!!gitOpsDisabledReason} tooltipContent={gitOpsDisabledReason}>
           <DropdownMenuItem
-            onClick={() => canPerformGitOps && onResolveConflicts(worktree)}
-            disabled={!canPerformGitOps}
+            onClick={() => isGitOpsAvailable && onResolveConflicts(worktree)}
+            disabled={!isGitOpsAvailable}
             className={cn(
               'text-xs text-purple-500 focus:text-purple-600',
-              !canPerformGitOps && 'opacity-50 cursor-not-allowed'
+              !isGitOpsAvailable && 'opacity-50 cursor-not-allowed'
             )}
           >
             <GitMerge className="w-3.5 h-3.5 mr-2" />
             Merge & Rebase
-            {!canPerformGitOps && <AlertCircle className="w-3 h-3 ml-auto text-muted-foreground" />}
+            {!isGitOpsAvailable && (
+              <AlertCircle className="w-3 h-3 ml-auto text-muted-foreground" />
+            )}
           </DropdownMenuItem>
         </TooltipWrapper>
         <TooltipWrapper showTooltip={!!gitOpsDisabledReason} tooltipContent={gitOpsDisabledReason}>
           <DropdownMenuItem
-            onClick={() => canPerformGitOps && onViewCommits(worktree)}
-            disabled={!canPerformGitOps}
-            className={cn('text-xs', !canPerformGitOps && 'opacity-50 cursor-not-allowed')}
+            onClick={() => isGitOpsAvailable && onViewCommits(worktree)}
+            disabled={!isGitOpsAvailable}
+            className={cn('text-xs', !isGitOpsAvailable && 'opacity-50 cursor-not-allowed')}
           >
             <History className="w-3.5 h-3.5 mr-2" />
             View Commits
-            {!canPerformGitOps && <AlertCircle className="w-3 h-3 ml-auto text-muted-foreground" />}
+            {!isGitOpsAvailable && (
+              <AlertCircle className="w-3 h-3 ml-auto text-muted-foreground" />
+            )}
           </DropdownMenuItem>
         </TooltipWrapper>
         {/* Cherry-pick commits from another branch */}
@@ -437,13 +457,13 @@ export function WorktreeActionsDropdown({
             tooltipContent={gitOpsDisabledReason}
           >
             <DropdownMenuItem
-              onClick={() => canPerformGitOps && onCherryPick(worktree)}
-              disabled={!canPerformGitOps}
-              className={cn('text-xs', !canPerformGitOps && 'opacity-50 cursor-not-allowed')}
+              onClick={() => isGitOpsAvailable && onCherryPick(worktree)}
+              disabled={!isGitOpsAvailable}
+              className={cn('text-xs', !isGitOpsAvailable && 'opacity-50 cursor-not-allowed')}
             >
               <Cherry className="w-3.5 h-3.5 mr-2" />
               Cherry Pick
-              {!canPerformGitOps && (
+              {!isGitOpsAvailable && (
                 <AlertCircle className="w-3 h-3 ml-auto text-muted-foreground" />
               )}
             </DropdownMenuItem>
@@ -451,7 +471,7 @@ export function WorktreeActionsDropdown({
         )}
         {/* Stash operations - combined submenu or simple item */}
         {(onStashChanges || onViewStashes) && (
-          <TooltipWrapper showTooltip={!canPerformGitOps} tooltipContent={gitOpsDisabledReason}>
+          <TooltipWrapper showTooltip={!isGitOpsAvailable} tooltipContent={gitOpsDisabledReason}>
             {onViewStashes && worktree.hasChanges && onStashChanges ? (
               // Both "Stash Changes" (primary) and "View Stashes" (secondary) are available - show split submenu
               <DropdownMenuSub>
@@ -459,18 +479,18 @@ export function WorktreeActionsDropdown({
                   {/* Main clickable area - stash changes (primary action) */}
                   <DropdownMenuItem
                     onClick={() => {
-                      if (!canPerformGitOps) return;
+                      if (!isGitOpsAvailable) return;
                       onStashChanges(worktree);
                     }}
-                    disabled={!canPerformGitOps}
+                    disabled={!isGitOpsAvailable}
                     className={cn(
                       'text-xs flex-1 pr-0 rounded-r-none',
-                      !canPerformGitOps && 'opacity-50 cursor-not-allowed'
+                      !isGitOpsAvailable && 'opacity-50 cursor-not-allowed'
                     )}
                   >
                     <Archive className="w-3.5 h-3.5 mr-2" />
                     Stash Changes
-                    {!canPerformGitOps && (
+                    {!isGitOpsAvailable && (
                       <AlertCircle className="w-3 h-3 ml-auto text-muted-foreground" />
                     )}
                   </DropdownMenuItem>
@@ -478,9 +498,9 @@ export function WorktreeActionsDropdown({
                   <DropdownMenuSubTrigger
                     className={cn(
                       'text-xs px-1 rounded-l-none border-l border-border/30 h-8',
-                      !canPerformGitOps && 'opacity-50 cursor-not-allowed'
+                      !isGitOpsAvailable && 'opacity-50 cursor-not-allowed'
                     )}
-                    disabled={!canPerformGitOps}
+                    disabled={!isGitOpsAvailable}
                   />
                 </div>
                 <DropdownMenuSubContent>
@@ -494,19 +514,19 @@ export function WorktreeActionsDropdown({
               // Only one action is meaningful - render a simple menu item without submenu
               <DropdownMenuItem
                 onClick={() => {
-                  if (!canPerformGitOps) return;
+                  if (!isGitOpsAvailable) return;
                   if (worktree.hasChanges && onStashChanges) {
                     onStashChanges(worktree);
                   } else if (onViewStashes) {
                     onViewStashes(worktree);
                   }
                 }}
-                disabled={!canPerformGitOps}
-                className={cn('text-xs', !canPerformGitOps && 'opacity-50 cursor-not-allowed')}
+                disabled={!isGitOpsAvailable}
+                className={cn('text-xs', !isGitOpsAvailable && 'opacity-50 cursor-not-allowed')}
               >
                 <Archive className="w-3.5 h-3.5 mr-2" />
                 {worktree.hasChanges && onStashChanges ? 'Stash Changes' : 'Stashes'}
-                {!canPerformGitOps && (
+                {!isGitOpsAvailable && (
                   <AlertCircle className="w-3 h-3 ml-auto text-muted-foreground" />
                 )}
               </DropdownMenuItem>
@@ -639,7 +659,7 @@ export function WorktreeActionsDropdown({
             Re-run Init Script
           </DropdownMenuItem>
         )}
-        <DropdownMenuSeparator />
+        {(hasChangesSectionContent || hasDestructiveSectionContent) && <DropdownMenuSeparator />}
 
         {worktree.hasChanges && (
           <DropdownMenuItem onClick={() => onViewChanges(worktree)} className="text-xs">
@@ -649,43 +669,43 @@ export function WorktreeActionsDropdown({
         )}
         {worktree.hasChanges && (
           <TooltipWrapper
-            showTooltip={!gitRepoStatus.isGitRepo}
-            tooltipContent="Not a git repository"
+            showTooltip={!!gitOpsDisabledReason}
+            tooltipContent={gitOpsDisabledReason}
           >
             <DropdownMenuItem
-              onClick={() => gitRepoStatus.isGitRepo && onCommit(worktree)}
-              disabled={!gitRepoStatus.isGitRepo}
-              className={cn('text-xs', !gitRepoStatus.isGitRepo && 'opacity-50 cursor-not-allowed')}
+              onClick={() => isGitOpsAvailable && onCommit(worktree)}
+              disabled={!isGitOpsAvailable}
+              className={cn('text-xs', !isGitOpsAvailable && 'opacity-50 cursor-not-allowed')}
             >
               <GitCommit className="w-3.5 h-3.5 mr-2" />
               Commit Changes
-              {!gitRepoStatus.isGitRepo && (
+              {!isGitOpsAvailable && (
                 <AlertCircle className="w-3 h-3 ml-auto text-muted-foreground" />
               )}
             </DropdownMenuItem>
           </TooltipWrapper>
         )}
         {/* Show PR option for non-primary worktrees, or primary worktree with changes */}
-        {(!worktree.isMain || worktree.hasChanges) && !hasPR && (
+        {showCreatePR && (
           <TooltipWrapper
             showTooltip={!!gitOpsDisabledReason}
             tooltipContent={gitOpsDisabledReason}
           >
             <DropdownMenuItem
-              onClick={() => canPerformGitOps && onCreatePR(worktree)}
-              disabled={!canPerformGitOps}
-              className={cn('text-xs', !canPerformGitOps && 'opacity-50 cursor-not-allowed')}
+              onClick={() => isGitOpsAvailable && onCreatePR(worktree)}
+              disabled={!isGitOpsAvailable}
+              className={cn('text-xs', !isGitOpsAvailable && 'opacity-50 cursor-not-allowed')}
             >
               <GitPullRequest className="w-3.5 h-3.5 mr-2" />
               Create Pull Request
-              {!canPerformGitOps && (
+              {!isGitOpsAvailable && (
                 <AlertCircle className="w-3 h-3 ml-auto text-muted-foreground" />
               )}
             </DropdownMenuItem>
           </TooltipWrapper>
         )}
         {/* Show PR info and Address Comments button if PR exists */}
-        {hasPR && worktree.pr && (
+        {showPRInfo && worktree.pr && (
           <>
             <DropdownMenuItem
               onClick={() => {
@@ -722,23 +742,23 @@ export function WorktreeActionsDropdown({
             </DropdownMenuItem>
           </>
         )}
-        <DropdownMenuSeparator />
+        {hasChangesSectionContent && hasDestructiveSectionContent && <DropdownMenuSeparator />}
         {worktree.hasChanges && (
           <TooltipWrapper
-            showTooltip={!gitRepoStatus.isGitRepo}
-            tooltipContent="Not a git repository"
+            showTooltip={!!gitOpsDisabledReason}
+            tooltipContent={gitOpsDisabledReason}
           >
             <DropdownMenuItem
-              onClick={() => gitRepoStatus.isGitRepo && onDiscardChanges(worktree)}
-              disabled={!gitRepoStatus.isGitRepo}
+              onClick={() => isGitOpsAvailable && onDiscardChanges(worktree)}
+              disabled={!isGitOpsAvailable}
               className={cn(
                 'text-xs text-destructive focus:text-destructive',
-                !gitRepoStatus.isGitRepo && 'opacity-50 cursor-not-allowed'
+                !isGitOpsAvailable && 'opacity-50 cursor-not-allowed'
               )}
             >
               <Undo2 className="w-3.5 h-3.5 mr-2" />
               Discard Changes
-              {!gitRepoStatus.isGitRepo && (
+              {!isGitOpsAvailable && (
                 <AlertCircle className="w-3 h-3 ml-auto text-muted-foreground" />
               )}
             </DropdownMenuItem>
@@ -751,16 +771,16 @@ export function WorktreeActionsDropdown({
               tooltipContent={gitOpsDisabledReason}
             >
               <DropdownMenuItem
-                onClick={() => canPerformGitOps && onMerge(worktree)}
-                disabled={!canPerformGitOps}
+                onClick={() => isGitOpsAvailable && onMerge(worktree)}
+                disabled={!isGitOpsAvailable}
                 className={cn(
                   'text-xs text-green-600 focus:text-green-700',
-                  !canPerformGitOps && 'opacity-50 cursor-not-allowed'
+                  !isGitOpsAvailable && 'opacity-50 cursor-not-allowed'
                 )}
               >
                 <GitMerge className="w-3.5 h-3.5 mr-2" />
                 Merge Branch
-                {!canPerformGitOps && (
+                {!isGitOpsAvailable && (
                   <AlertCircle className="w-3 h-3 ml-auto text-muted-foreground" />
                 )}
               </DropdownMenuItem>

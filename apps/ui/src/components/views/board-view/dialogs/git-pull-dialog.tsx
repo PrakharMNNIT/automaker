@@ -42,6 +42,7 @@ type PullPhase =
 
 interface PullResult {
   branch: string;
+  remote?: string;
   pulled: boolean;
   message: string;
   hasLocalChanges?: boolean;
@@ -115,6 +116,11 @@ export function GitPullDialog({
         setPullResult(result.result);
         setPhase('success');
         onPulled?.();
+      } else {
+        // Unexpected response: success but no recognizable fields
+        setPullResult(result.result ?? null);
+        setErrorMessage('Unexpected pull response');
+        setPhase('error');
       }
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Failed to check for changes');
@@ -160,8 +166,9 @@ export function GitPullDialog({
   const handleResolveWithAI = useCallback(() => {
     if (!worktree || !pullResult || !onCreateConflictResolutionFeature) return;
 
+    const effectiveRemote = pullResult.remote || remote;
     const conflictInfo: MergeConflictInfo = {
-      sourceBranch: `${remote || 'origin'}/${pullResult.branch}`,
+      sourceBranch: effectiveRemote ? `${effectiveRemote}/${pullResult.branch}` : pullResult.branch,
       targetBranch: pullResult.branch,
       targetWorktreePath: worktree.path,
       conflictFiles: pullResult.conflictFiles || [],

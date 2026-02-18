@@ -10,7 +10,8 @@
 import type { Request, Response } from 'express';
 import path from 'path';
 import { stat } from 'fs/promises';
-import { getErrorMessage, logError, isValidBranchName, execGitCommand } from '../common.js';
+import { getErrorMessage, logError, isValidBranchName } from '../common.js';
+import { execGitCommand } from '../../../lib/git.js';
 
 export function createCheckoutBranchHandler() {
   return async (req: Request, res: Response): Promise<void> => {

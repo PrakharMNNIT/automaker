@@ -1,29 +1,22 @@
 /**
  * POST /stash-list endpoint - List all stashes in a worktree
  *
- * Returns a list of all stash entries with their index, message, branch, and date.
- * Also includes the list of files changed in each stash.
+ * The handler only validates input, invokes the service, streams lifecycle
+ * events via the EventEmitter, and sends the final JSON response.
+ *
+ * Git business logic is delegated to stash-service.ts.
+ * Events are emitted at key lifecycle points for WebSocket subscribers.
  *
  * Note: Git repository validation (isGitRepo) is handled by
  * the requireGitRepoOnly middleware in index.ts
  */
 
 import type { Request, Response } from 'express';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
+import type { EventEmitter } from '../../../lib/events.js';
 import { getErrorMessage, logError } from '../common.js';
+import { listStash } from '../../../services/stash-service.js';
 
-const execFileAsync = promisify(execFile);
-
-interface StashEntry {
-  index: number;
-  message: string;
-  branch: string;
-  date: string;
-  files: string[];
-}
-
-export function createStashListHandler() {
+export function createStashListHandler(events: EventEmitter) {
   return async (req: Request, res: Response): Promise<void> => {
     try {
       const { worktreePath } = req.body as {
@@ -38,84 +31,44 @@ export function createStashListHandler() {
         return;
       }
 
-      // Get stash list with format: index, message, date
-      // Use %aI (strict ISO 8601) instead of %ai to ensure cross-browser compatibility
-      const { stdout: stashOutput } = await execFileAsync(
-        'git',
-        ['stash', 'list', '--format=%gd|||%s|||%aI'],
-        { cwd: worktreePath }
-      );
+      // Emit start event so the frontend can observe progress
+      events.emit('stash:start', {
+        worktreePath,
+        operation: 'list',
+      });
 
-      if (!stashOutput.trim()) {
-        res.json({
-          success: true,
-          result: {
-            stashes: [],
-            total: 0,
-          },
-        });
-        return;
-      }
+      // Delegate all Git work to the service
+      const result = await listStash(worktreePath);
 
-      const stashLines = stashOutput
-        .trim()
-        .split('\n')
-        .filter((l) => l.trim());
-      const stashes: StashEntry[] = [];
+      // Emit progress with stash count
+      events.emit('stash:progress', {
+        worktreePath,
+        operation: 'list',
+        total: result.total,
+      });
 
-      for (const line of stashLines) {
-        const parts = line.split('|||');
-        if (parts.length < 3) continue;
-
-        const refSpec = parts[0].trim(); // e.g., "stash@{0}"
-        const message = parts[1].trim();
-        const date = parts[2].trim();
-
-        // Extract index from stash@{N}; skip entries that don't match the expected format
-        const indexMatch = refSpec.match(/stash@\{(\d+)\}/);
-        if (!indexMatch) continue;
-        const index = parseInt(indexMatch[1], 10);
-
-        // Extract branch name from message (format: "WIP on branch: hash message" or "On branch: hash message")
-        let branch = '';
-        const branchMatch = message.match(/^(?:WIP on|On) ([^:]+):/);
-        if (branchMatch) {
-          branch = branchMatch[1];
-        }
-
-        // Get list of files in this stash
-        let files: string[] = [];
-        try {
-          const { stdout: filesOutput } = await execFileAsync(
-            'git',
-            ['stash', 'show', refSpec, '--name-only'],
-            { cwd: worktreePath }
-          );
-          files = filesOutput
-            .trim()
-            .split('\n')
-            .filter((f) => f.trim());
-        } catch {
-          // Ignore errors getting file list
-        }
-
-        stashes.push({
-          index,
-          message,
-          branch,
-          date,
-          files,
-        });
-      }
+      // Emit success event
+      events.emit('stash:success', {
+        worktreePath,
+        operation: 'list',
+        total: result.total,
+      });
 
       res.json({
         success: true,
         result: {
-          stashes,
-          total: stashes.length,
+          stashes: result.stashes,
+          total: result.total,
         },
       });
     } catch (error) {
+      // Emit error event so the frontend can react
+      events.emit('stash:failure', {
+        worktreePath: req.body?.worktreePath,
+        operation: 'list',
+        error: getErrorMessage(error),
+      });
+
       logError(error, 'Stash list failed');
       res.status(500).json({ success: false, error: getErrorMessage(error) });
     }

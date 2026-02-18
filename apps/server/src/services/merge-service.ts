@@ -5,7 +5,8 @@
  */
 
 import { createLogger } from '@automaker/utils';
-import { spawnProcess } from '@automaker/platform';
+import { createEventEmitter } from '../lib/events';
+import { execGitCommand } from '../lib/git.js';
 const logger = createLogger('MergeService');
 
 export interface MergeOptions {
@@ -28,32 +29,13 @@ export interface MergeServiceResult {
 }
 
 /**
- * Execute git command with array arguments to prevent command injection.
- */
-async function execGitCommand(args: string[], cwd: string): Promise<string> {
-  const result = await spawnProcess({
-    command: 'git',
-    args,
-    cwd,
-  });
-
-  if (result.exitCode === 0) {
-    return result.stdout;
-  } else {
-    const errorMessage =
-      result.stderr || result.stdout || `Git command failed with code ${result.exitCode}`;
-    throw Object.assign(new Error(errorMessage), {
-      stdout: result.stdout,
-      stderr: result.stderr,
-    });
-  }
-}
-
-/**
  * Validate branch name to prevent command injection.
+ * The first character must not be '-' to prevent git argument injection
+ * via names like "-flag" or "--option".
  */
 function isValidBranchName(name: string): boolean {
-  return /^[a-zA-Z0-9._\-/]+$/.test(name) && name.length < 250;
+  // First char must be alphanumeric, dot, underscore, or slash (not dash)
+  return /^[a-zA-Z0-9._/][a-zA-Z0-9._\-/]*$/.test(name) && name.length < 250;
 }
 
 /**
@@ -72,6 +54,8 @@ export async function performMerge(
   targetBranch: string = 'main',
   options?: MergeOptions
 ): Promise<MergeServiceResult> {
+  const emitter = createEventEmitter();
+
   if (!projectPath || !branchName || !worktreePath) {
     return {
       success: false,
@@ -115,6 +99,9 @@ export async function performMerge(
     };
   }
 
+  // Emit merge:start after validating inputs
+  emitter.emit('merge:start', { branchName, targetBranch: mergeTo, worktreePath });
+
   // Merge the feature branch into the target branch (using safe array-based commands)
   const mergeMessage = options?.message || `Merge ${branchName} into ${mergeTo}`;
   const mergeArgs = options?.squash
@@ -131,7 +118,7 @@ export async function performMerge(
 
     if (hasConflicts) {
       // Get list of conflicted files
-      let conflictFiles: string[] = [];
+      let conflictFiles: string[] | undefined;
       try {
         const diffOutput = await execGitCommand(
           ['diff', '--name-only', '--diff-filter=U'],
@@ -142,8 +129,12 @@ export async function performMerge(
           .split('\n')
           .filter((f) => f.trim().length > 0);
       } catch {
-        // If we can't get the file list, that's okay - continue without it
+        // If we can't get the file list, leave conflictFiles undefined so callers
+        // can distinguish "no conflicts" (empty array) from "unknown due to diff failure" (undefined)
       }
+
+      // Emit merge:conflict event with conflict details
+      emitter.emit('merge:conflict', { branchName, targetBranch: mergeTo, conflictFiles });
 
       return {
         success: false,
@@ -152,6 +143,13 @@ export async function performMerge(
         conflictFiles,
       };
     }
+
+    // Emit merge:error for non-conflict errors before re-throwing
+    emitter.emit('merge:error', {
+      branchName,
+      targetBranch: mergeTo,
+      error: err.message || String(mergeError),
+    });
 
     // Re-throw non-conflict errors
     throw mergeError;
@@ -196,6 +194,13 @@ export async function performMerge(
       }
     }
   }
+
+  // Emit merge:success with merged branch, target branch, and deletion info
+  emitter.emit('merge:success', {
+    mergedBranch: branchName,
+    targetBranch: mergeTo,
+    deleted: options?.deleteWorktreeAndBranch ? { worktreeDeleted, branchDeleted } : undefined,
+  });
 
   return {
     success: true,

@@ -8,11 +8,11 @@ import {
   logError,
   execAsync,
   execEnv,
-  execGitCommand,
   isValidBranchName,
   isValidRemoteName,
   isGhCliAvailable,
 } from '../common.js';
+import { execGitCommand } from '../../../lib/git.js';
 import { spawnProcess } from '@automaker/platform';
 import { updateWorktreePRInfo } from '../../../lib/worktree-metadata.js';
 import { createLogger } from '@automaker/utils';

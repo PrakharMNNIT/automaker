@@ -633,14 +633,14 @@ export function WorktreePanel({
         setPullDialogRemote(remote);
         setPullDialogWorktree(worktree);
         setPullDialogOpen(true);
-        await handlePull(worktree, remote);
+        await _handlePull(worktree, remote);
       } else {
         await handlePush(worktree, remote);
       }
       fetchBranches(worktree.path);
       fetchWorktrees();
     },
-    [selectRemoteOperation, handlePush, fetchBranches, fetchWorktrees]
+    [selectRemoteOperation, _handlePull, handlePush, fetchBranches, fetchWorktrees]
   );
 
   // Handle confirming the push to remote dialog

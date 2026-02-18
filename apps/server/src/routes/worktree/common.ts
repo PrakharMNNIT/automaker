@@ -3,56 +3,16 @@
  */
 
 import { createLogger } from '@automaker/utils';
-import { spawnProcess } from '@automaker/platform';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { getErrorMessage as getErrorMessageShared, createLogError } from '../common.js';
 
+// Re-export execGitCommand from the canonical shared module so any remaining
+// consumers that import from this file continue to work.
+export { execGitCommand } from '../../lib/git.js';
+
 const logger = createLogger('Worktree');
 export const execAsync = promisify(exec);
-
-// ============================================================================
-// Secure Command Execution
-// ============================================================================
-
-/**
- * Execute git command with array arguments to prevent command injection.
- * Uses spawnProcess from @automaker/platform for secure, cross-platform execution.
- *
- * @param args - Array of git command arguments (e.g., ['worktree', 'add', path])
- * @param cwd - Working directory to execute the command in
- * @returns Promise resolving to stdout output
- * @throws Error with stderr/stdout message if command fails. The thrown error
- *   also has `stdout` and `stderr` string properties for structured access.
- *
- * @example
- * ```typescript
- * // Safe: no injection possible
- * await execGitCommand(['branch', '-D', branchName], projectPath);
- *
- * // Instead of unsafe:
- * // await execAsync(`git branch -D ${branchName}`, { cwd });
- * ```
- */
-export async function execGitCommand(args: string[], cwd: string): Promise<string> {
-  const result = await spawnProcess({
-    command: 'git',
-    args,
-    cwd,
-  });
-
-  // spawnProcess returns { stdout, stderr, exitCode }
-  if (result.exitCode === 0) {
-    return result.stdout;
-  } else {
-    const errorMessage =
-      result.stderr || result.stdout || `Git command failed with code ${result.exitCode}`;
-    throw Object.assign(new Error(errorMessage), {
-      stdout: result.stdout,
-      stderr: result.stderr,
-    });
-  }
-}
 
 // ============================================================================
 // Constants
@@ -111,9 +71,12 @@ export const execEnv = {
  * Validate branch name to prevent command injection.
  * Git branch names cannot contain: space, ~, ^, :, ?, *, [, \, or control chars.
  * We also reject shell metacharacters for safety.
+ * The first character must not be '-' to prevent git argument injection.
  */
 export function isValidBranchName(name: string): boolean {
-  return /^[a-zA-Z0-9._\-/]+$/.test(name) && name.length < MAX_BRANCH_NAME_LENGTH;
+  // First char must be alphanumeric, dot, underscore, or slash (not dash)
+  // to prevent git option injection via names like "-flag" or "--option".
+  return /^[a-zA-Z0-9._/][a-zA-Z0-9._\-/]*$/.test(name) && name.length < MAX_BRANCH_NAME_LENGTH;
 }
 
 /**

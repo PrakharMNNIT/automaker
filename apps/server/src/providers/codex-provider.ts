@@ -205,10 +205,28 @@ async function resolveCodexExecutionPlan(options: ExecuteOptions): Promise<Codex
   const authIndicators = await getCodexAuthIndicators();
   const openAiApiKey = await resolveOpenAiApiKey();
   const hasApiKey = Boolean(openAiApiKey);
-  const cliAuthenticated = authIndicators.hasOAuthToken || authIndicators.hasApiKey || hasApiKey;
-  const sdkEligible = isSdkEligible(options);
   const cliAvailable = Boolean(cliPath);
+  // CLI OAuth login takes priority: if the user has logged in via `codex login`,
+  // use the CLI regardless of whether an API key is also stored.
+  // hasOAuthToken = OAuth session from `codex login`
+  // authIndicators.hasApiKey = API key stored in Codex's own auth file (via `codex login --api-key`)
+  // Both are "CLI-native" auth — distinct from an API key stored in Automaker's credentials.
+  const hasCliNativeAuth = authIndicators.hasOAuthToken || authIndicators.hasApiKey;
+  const cliAuthenticated = hasCliNativeAuth || hasApiKey;
+  const sdkEligible = isSdkEligible(options);
 
+  // If CLI is available and the user authenticated via the CLI (`codex login`),
+  // prefer CLI mode over SDK. This ensures `codex login` sessions take priority
+  // over API keys stored in Automaker's credentials.
+  if (cliAvailable && hasCliNativeAuth) {
+    return {
+      mode: CODEX_EXECUTION_MODE_CLI,
+      cliPath,
+      openAiApiKey,
+    };
+  }
+
+  // No CLI-native auth — fall back to API key via SDK if available.
   if (hasApiKey) {
     return {
       mode: CODEX_EXECUTION_MODE_SDK,
@@ -854,16 +872,35 @@ export class CodexProvider extends BaseProvider {
 
           // Enhance error message with helpful context
           let enhancedError = errorText;
-          if (errorText.toLowerCase().includes('rate limit')) {
+          const errorLower = errorText.toLowerCase();
+          if (errorLower.includes('rate limit')) {
             enhancedError = `${errorText}\n\nTip: You're being rate limited. Try reducing concurrent tasks or waiting a few minutes before retrying.`;
-          } else if (
-            errorText.toLowerCase().includes('authentication') ||
-            errorText.toLowerCase().includes('unauthorized')
-          ) {
+          } else if (errorLower.includes('authentication') || errorLower.includes('unauthorized')) {
             enhancedError = `${errorText}\n\nTip: Check that your OPENAI_API_KEY is set correctly or run 'codex auth login' to authenticate.`;
           } else if (
-            errorText.toLowerCase().includes('not found') ||
-            errorText.toLowerCase().includes('command not found')
+            errorLower.includes('does not exist') ||
+            errorLower.includes('do not have access') ||
+            errorLower.includes('model_not_found') ||
+            errorLower.includes('invalid_model')
+          ) {
+            enhancedError =
+              `${errorText}\n\nTip: The model '${options.model}' may not be available on your OpenAI plan. ` +
+              `Some models (like gpt-5.3-codex) require a ChatGPT Pro/Plus subscription and OAuth login via 'codex login'. ` +
+              `Try using a different model (e.g., gpt-5.1 or gpt-5.2), or authenticate with 'codex login' instead of an API key.`;
+          } else if (
+            errorLower.includes('stream disconnected') ||
+            errorLower.includes('stream ended') ||
+            errorLower.includes('connection reset')
+          ) {
+            enhancedError =
+              `${errorText}\n\nTip: The connection to OpenAI was interrupted. This can happen due to:\n` +
+              `- Network instability\n` +
+              `- The model not being available on your plan\n` +
+              `- Server-side timeouts for long-running requests\n` +
+              `Try again, or switch to a different model.`;
+          } else if (
+            errorLower.includes('command not found') ||
+            (errorLower.includes('not found') && !errorLower.includes('model'))
           ) {
             enhancedError = `${errorText}\n\nTip: Make sure the Codex CLI is installed. Run 'npm install -g @openai/codex-cli' to install.`;
           }

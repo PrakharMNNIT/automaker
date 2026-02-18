@@ -96,6 +96,20 @@ export function createRebaseHandler(events: EventEmitter) {
           conflictFiles: result.conflictFiles,
           aborted: result.aborted,
         });
+      } else {
+        // Emit failure event for non-conflict failures
+        events.emit('rebase:failed', {
+          worktreePath: resolvedWorktreePath,
+          branch: result.branch,
+          ontoBranch: result.ontoBranch,
+          error: result.error,
+        });
+
+        res.status(500).json({
+          success: false,
+          error: result.error ?? 'Rebase failed',
+          hasConflicts: false,
+        });
       }
     } catch (error) {
       // Emit failure event

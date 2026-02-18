@@ -17,13 +17,10 @@
  */
 
 import type { Request, Response } from 'express';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
 import * as path from 'path';
 import * as fs from 'fs';
-import { getErrorMessage, logError } from '../common.js';
-
-const execFileAsync = promisify(execFile);
+import { getErrorMessage, logError } from '@automaker/utils';
+import { execGitCommand } from '../../../lib/git.js';
 
 /**
  * Validate that a file path does not escape the worktree directory.
@@ -72,9 +69,7 @@ export function createDiscardChangesHandler() {
       }
 
       // Check for uncommitted changes first
-      const { stdout: status } = await execFileAsync('git', ['status', '--porcelain'], {
-        cwd: worktreePath,
-      });
+      const status = await execGitCommand(['status', '--porcelain'], worktreePath);
 
       if (!status.trim()) {
         res.json({
@@ -88,12 +83,9 @@ export function createDiscardChangesHandler() {
       }
 
       // Get branch name before discarding
-      const { stdout: branchOutput } = await execFileAsync(
-        'git',
+      const branchOutput = await execGitCommand(
         ['rev-parse', '--abbrev-ref', 'HEAD'],
-        {
-          cwd: worktreePath,
-        }
+        worktreePath
       );
       const branchName = branchOutput.trim();
 
@@ -162,9 +154,7 @@ export function createDiscardChangesHandler() {
         // 1. Unstage selected staged files (using execFile to bypass shell)
         if (stagedFiles.length > 0) {
           try {
-            await execFileAsync('git', ['reset', 'HEAD', '--', ...stagedFiles], {
-              cwd: worktreePath,
-            });
+            await execGitCommand(['reset', 'HEAD', '--', ...stagedFiles], worktreePath);
           } catch (error) {
             const msg = getErrorMessage(error);
             logError(error, `Failed to unstage files: ${msg}`);
@@ -175,9 +165,7 @@ export function createDiscardChangesHandler() {
         // 2. Revert selected tracked file changes
         if (trackedModified.length > 0) {
           try {
-            await execFileAsync('git', ['checkout', '--', ...trackedModified], {
-              cwd: worktreePath,
-            });
+            await execGitCommand(['checkout', '--', ...trackedModified], worktreePath);
           } catch (error) {
             const msg = getErrorMessage(error);
             logError(error, `Failed to revert tracked files: ${msg}`);
@@ -188,9 +176,7 @@ export function createDiscardChangesHandler() {
         // 3. Remove selected untracked files
         if (untrackedFiles.length > 0) {
           try {
-            await execFileAsync('git', ['clean', '-fd', '--', ...untrackedFiles], {
-              cwd: worktreePath,
-            });
+            await execGitCommand(['clean', '-fd', '--', ...untrackedFiles], worktreePath);
           } catch (error) {
             const msg = getErrorMessage(error);
             logError(error, `Failed to clean untracked files: ${msg}`);
@@ -201,9 +187,7 @@ export function createDiscardChangesHandler() {
         const fileCount = files.length;
 
         // Verify the remaining state
-        const { stdout: finalStatus } = await execFileAsync('git', ['status', '--porcelain'], {
-          cwd: worktreePath,
-        });
+        const finalStatus = await execGitCommand(['status', '--porcelain'], worktreePath);
 
         const remainingCount = finalStatus.trim()
           ? finalStatus.trim().split('\n').filter(Boolean).length
@@ -233,7 +217,7 @@ export function createDiscardChangesHandler() {
 
         // 1. Reset any staged changes
         try {
-          await execFileAsync('git', ['reset', 'HEAD'], { cwd: worktreePath });
+          await execGitCommand(['reset', 'HEAD'], worktreePath);
         } catch (error) {
           const msg = getErrorMessage(error);
           logError(error, `git reset HEAD failed: ${msg}`);
@@ -242,7 +226,7 @@ export function createDiscardChangesHandler() {
 
         // 2. Discard changes in tracked files
         try {
-          await execFileAsync('git', ['checkout', '.'], { cwd: worktreePath });
+          await execGitCommand(['checkout', '.'], worktreePath);
         } catch (error) {
           const msg = getErrorMessage(error);
           logError(error, `git checkout . failed: ${msg}`);
@@ -251,7 +235,7 @@ export function createDiscardChangesHandler() {
 
         // 3. Remove untracked files and directories
         try {
-          await execFileAsync('git', ['clean', '-fd'], { cwd: worktreePath });
+          await execGitCommand(['clean', '-fd'], worktreePath);
         } catch (error) {
           const msg = getErrorMessage(error);
           logError(error, `git clean -fd failed: ${msg}`);
@@ -259,9 +243,7 @@ export function createDiscardChangesHandler() {
         }
 
         // Verify all changes were discarded
-        const { stdout: finalStatus } = await execFileAsync('git', ['status', '--porcelain'], {
-          cwd: worktreePath,
-        });
+        const finalStatus = await execGitCommand(['status', '--porcelain'], worktreePath);
 
         if (finalStatus.trim()) {
           const remainingCount = finalStatus.trim().split('\n').filter(Boolean).length;

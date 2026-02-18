@@ -17,10 +17,11 @@ import { promisify } from 'util';
 import type { Feature, PlanningMode, ThinkingLevel } from '@automaker/types';
 import { DEFAULT_MAX_CONCURRENCY, stripProviderPrefix } from '@automaker/types';
 import { createLogger, loadContextFiles, classifyError } from '@automaker/utils';
-import { getFeatureDir, spawnProcess } from '@automaker/platform';
+import { getFeatureDir } from '@automaker/platform';
 import * as secureFs from '../../lib/secure-fs.js';
 import { validateWorkingDirectory } from '../../lib/sdk-options.js';
 import { getPromptCustomization, getProviderByModelId } from '../../lib/settings-helpers.js';
+import { execGitCommand } from '../../lib/git.js';
 import { TypedEventBus } from '../typed-event-bus.js';
 import { ConcurrencyManager } from '../concurrency-manager.js';
 import { WorktreeResolver } from '../worktree-resolver.js';
@@ -48,24 +49,6 @@ import type {
 
 const execAsync = promisify(exec);
 const logger = createLogger('AutoModeServiceFacade');
-
-/**
- * Execute git command with array arguments to prevent command injection.
- */
-async function execGitCommand(args: string[], cwd: string): Promise<string> {
-  const result = await spawnProcess({
-    command: 'git',
-    args,
-    cwd,
-  });
-
-  if (result.exitCode === 0) {
-    return result.stdout;
-  } else {
-    const errorMessage = result.stderr || `Git command failed with code ${result.exitCode}`;
-    throw new Error(errorMessage);
-  }
-}
 
 /**
  * AutoModeServiceFacade provides a clean interface for auto-mode functionality.

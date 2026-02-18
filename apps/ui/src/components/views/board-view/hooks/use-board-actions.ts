@@ -930,6 +930,7 @@ export function useBoardActions({
       // - If the feature had a branch assigned, keep it (preserves worktree context)
       // - If no branch was assigned, it will show on the primary worktree
       const featureBranch = feature.branchName;
+      const branchLabel = featureBranch ?? 'primary worktree';
 
       // Check if the feature will be visible on the current worktree view
       const willBeVisibleOnCurrentView = !featureBranch
@@ -949,7 +950,7 @@ export function useBoardActions({
         });
       } else {
         toast.success('Feature restored', {
-          description: `Moved back to verified on branch "${featureBranch}": ${truncateDescription(feature.description)}`,
+          description: `Moved back to verified on branch "${branchLabel}": ${truncateDescription(feature.description)}`,
         });
       }
     },

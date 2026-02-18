@@ -1,21 +1,22 @@
 /**
  * POST /stash-push endpoint - Stash changes in a worktree
  *
- * Stashes uncommitted changes (including untracked files) with an optional message.
- * Supports selective file stashing when a files array is provided.
+ * The handler only validates input, invokes the service, streams lifecycle
+ * events via the EventEmitter, and sends the final JSON response.
+ *
+ * Git business logic is delegated to stash-service.ts.
+ * Events are emitted at key lifecycle points for WebSocket subscribers.
  *
  * Note: Git repository validation (isGitRepo) is handled by
  * the requireGitRepoOnly middleware in index.ts
  */
 
 import type { Request, Response } from 'express';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
+import type { EventEmitter } from '../../../lib/events.js';
 import { getErrorMessage, logError } from '../common.js';
+import { pushStash } from '../../../services/stash-service.js';
 
-const execFileAsync = promisify(execFile);
-
-export function createStashPushHandler() {
+export function createStashPushHandler(events: EventEmitter) {
   return async (req: Request, res: Response): Promise<void> => {
     try {
       const { worktreePath, message, files } = req.body as {
@@ -32,54 +33,47 @@ export function createStashPushHandler() {
         return;
       }
 
-      // Check for any changes to stash
-      const { stdout: status } = await execFileAsync('git', ['status', '--porcelain'], {
-        cwd: worktreePath,
+      // Emit start event so the frontend can observe progress
+      events.emit('stash:start', {
+        worktreePath,
+        operation: 'push',
       });
 
-      if (!status.trim()) {
-        res.json({
-          success: true,
-          result: {
-            stashed: false,
-            message: 'No changes to stash',
-          },
-        });
-        return;
-      }
+      // Delegate all Git work to the service
+      const result = await pushStash(worktreePath, { message, files });
 
-      // Build stash push command args
-      const args = ['stash', 'push', '--include-untracked'];
-      if (message && message.trim()) {
-        args.push('-m', message.trim());
-      }
+      // Emit progress with stash result
+      events.emit('stash:progress', {
+        worktreePath,
+        operation: 'push',
+        stashed: result.stashed,
+        branch: result.branch,
+      });
 
-      // If specific files are provided, add them as pathspecs after '--'
-      if (files && files.length > 0) {
-        args.push('--');
-        args.push(...files);
-      }
-
-      // Execute stash push
-      await execFileAsync('git', args, { cwd: worktreePath });
-
-      // Get current branch name
-      const { stdout: branchOutput } = await execFileAsync(
-        'git',
-        ['rev-parse', '--abbrev-ref', 'HEAD'],
-        { cwd: worktreePath }
-      );
-      const branchName = branchOutput.trim();
+      // Emit success event
+      events.emit('stash:success', {
+        worktreePath,
+        operation: 'push',
+        stashed: result.stashed,
+        branch: result.branch,
+      });
 
       res.json({
         success: true,
         result: {
-          stashed: true,
-          branch: branchName,
-          message: message?.trim() || `WIP on ${branchName}`,
+          stashed: result.stashed,
+          branch: result.branch,
+          message: result.message,
         },
       });
     } catch (error) {
+      // Emit error event so the frontend can react
+      events.emit('stash:failure', {
+        worktreePath: req.body?.worktreePath,
+        operation: 'push',
+        error: getErrorMessage(error),
+      });
+
       logError(error, 'Stash push failed');
       res.status(500).json({ success: false, error: getErrorMessage(error) });
     }

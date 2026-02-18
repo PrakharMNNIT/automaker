@@ -6,6 +6,9 @@
  *
  * Git business logic is delegated to cherry-pick-service.ts.
  * Events are emitted at key lifecycle points for WebSocket subscribers.
+ * The global event emitter is passed into the service so all lifecycle
+ * events (started, success, conflict, abort, verify-failed) are broadcast
+ * to WebSocket clients.
  *
  * Note: Git repository validation (isGitRepo, hasCommits) is handled by
  * the requireValidWorktree middleware in index.ts
@@ -58,8 +61,8 @@ export function createCherryPickHandler(events: EventEmitter) {
         }
       }
 
-      // Verify each commit exists via the service
-      const invalidHash = await verifyCommits(resolvedWorktreePath, commitHashes);
+      // Verify each commit exists via the service; emits cherry-pick:verify-failed if any hash is missing
+      const invalidHash = await verifyCommits(resolvedWorktreePath, commitHashes, events);
       if (invalidHash !== null) {
         res.status(400).json({
           success: false,
@@ -68,24 +71,12 @@ export function createCherryPickHandler(events: EventEmitter) {
         return;
       }
 
-      // Emit started event
-      events.emit('cherry-pick:started', {
-        worktreePath: resolvedWorktreePath,
-        commitHashes,
-        options,
-      });
-
-      // Execute the cherry-pick via the service
-      const result = await runCherryPick(resolvedWorktreePath, commitHashes, options);
+      // Execute the cherry-pick via the service.
+      // The service emits: cherry-pick:started, cherry-pick:success, cherry-pick:conflict,
+      // and cherry-pick:abort at the appropriate lifecycle points.
+      const result = await runCherryPick(resolvedWorktreePath, commitHashes, options, events);
 
       if (result.success) {
-        // Emit success event
-        events.emit('cherry-pick:success', {
-          worktreePath: resolvedWorktreePath,
-          commitHashes,
-          branch: result.branch,
-        });
-
         res.json({
           success: true,
           result: {
@@ -96,13 +87,6 @@ export function createCherryPickHandler(events: EventEmitter) {
           },
         });
       } else if (result.hasConflicts) {
-        // Emit conflict event
-        events.emit('cherry-pick:conflict', {
-          worktreePath: resolvedWorktreePath,
-          commitHashes,
-          aborted: result.aborted,
-        });
-
         res.status(409).json({
           success: false,
           error: result.error,
@@ -111,7 +95,7 @@ export function createCherryPickHandler(events: EventEmitter) {
         });
       }
     } catch (error) {
-      // Emit failure event
+      // Emit failure event for unexpected (non-conflict) errors
       events.emit('cherry-pick:failure', {
         error: getErrorMessage(error),
       });

@@ -187,6 +187,8 @@ export interface AppState {
   codexApprovalPolicy: 'untrusted' | 'on-failure' | 'on-request' | 'never'; // Approval policy
   codexEnableWebSearch: boolean; // Enable web search capability
   codexEnableImages: boolean; // Enable image processing
+  codexAdditionalDirs: string[]; // Additional directories with write access (--add-dir flags)
+  codexThreadId: string | undefined; // Last thread ID for session resumption
 
   // OpenCode CLI Settings (global)
   // Static OpenCode settings are persisted via SETTINGS_FIELDS_TO_SYNC

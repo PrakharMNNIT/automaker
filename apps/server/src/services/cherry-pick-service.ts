@@ -7,7 +7,8 @@
  */
 
 import { createLogger } from '@automaker/utils';
-import { execGitCommand } from '../routes/worktree/common.js';
+import { execGitCommand, getCurrentBranch } from '../lib/git.js';
+import { type EventEmitter } from '../lib/events.js';
 
 const logger = createLogger('CherryPickService');
 
@@ -39,16 +40,19 @@ export interface CherryPickResult {
  *
  * @param worktreePath - Path to the git worktree
  * @param commitHashes - Array of commit hashes to verify
+ * @param emitter - Optional event emitter for lifecycle events
  * @returns The first invalid commit hash, or null if all are valid
  */
 export async function verifyCommits(
   worktreePath: string,
-  commitHashes: string[]
+  commitHashes: string[],
+  emitter?: EventEmitter
 ): Promise<string | null> {
   for (const hash of commitHashes) {
     try {
       await execGitCommand(['rev-parse', '--verify', hash], worktreePath);
     } catch {
+      emitter?.emit('cherry-pick:verify-failed', { worktreePath, hash });
       return hash;
     }
   }
@@ -61,12 +65,14 @@ export async function verifyCommits(
  * @param worktreePath - Path to the git worktree
  * @param commitHashes - Array of commit hashes to cherry-pick (in order)
  * @param options - Cherry-pick options (e.g., noCommit)
+ * @param emitter - Optional event emitter for lifecycle events
  * @returns CherryPickResult with success/failure information
  */
 export async function runCherryPick(
   worktreePath: string,
   commitHashes: string[],
-  options?: CherryPickOptions
+  options?: CherryPickOptions,
+  emitter?: EventEmitter
 ): Promise<CherryPickResult> {
   const args = ['cherry-pick'];
   if (options?.noCommit) {
@@ -74,28 +80,34 @@ export async function runCherryPick(
   }
   args.push(...commitHashes);
 
+  emitter?.emit('cherry-pick:started', { worktreePath, commitHashes });
+
   try {
     await execGitCommand(args, worktreePath);
 
     const branch = await getCurrentBranch(worktreePath);
 
     if (options?.noCommit) {
-      return {
+      const result: CherryPickResult = {
         success: true,
         cherryPicked: false,
         commitHashes,
         branch,
         message: `Staged changes from ${commitHashes.length} commit(s); no commit created due to --no-commit`,
       };
+      emitter?.emit('cherry-pick:success', { worktreePath, commitHashes, branch });
+      return result;
     }
 
-    return {
+    const result: CherryPickResult = {
       success: true,
       cherryPicked: true,
       commitHashes,
       branch,
       message: `Successfully cherry-picked ${commitHashes.length} commit(s)`,
     };
+    emitter?.emit('cherry-pick:success', { worktreePath, commitHashes, branch });
+    return result;
   } catch (cherryPickError: unknown) {
     // Check if this is a cherry-pick conflict
     const err = cherryPickError as { stdout?: string; stderr?: string; message?: string };
@@ -107,7 +119,7 @@ export async function runCherryPick(
 
     if (hasConflicts) {
       // Abort the cherry-pick to leave the repo in a clean state
-      const aborted = await abortCherryPick(worktreePath);
+      const aborted = await abortCherryPick(worktreePath, emitter);
 
       if (!aborted) {
         logger.error(
@@ -115,6 +127,14 @@ export async function runCherryPick(
           { worktreePath }
         );
       }
+
+      emitter?.emit('cherry-pick:conflict', {
+        worktreePath,
+        commitHashes,
+        aborted,
+        stdout: err.stdout,
+        stderr: err.stderr,
+      });
 
       return {
         success: false,
@@ -135,25 +155,25 @@ export async function runCherryPick(
  * Abort an in-progress cherry-pick operation.
  *
  * @param worktreePath - Path to the git worktree
+ * @param emitter - Optional event emitter for lifecycle events
  * @returns true if abort succeeded, false if it failed (logged as warning)
  */
-export async function abortCherryPick(worktreePath: string): Promise<boolean> {
+export async function abortCherryPick(
+  worktreePath: string,
+  emitter?: EventEmitter
+): Promise<boolean> {
   try {
     await execGitCommand(['cherry-pick', '--abort'], worktreePath);
+    emitter?.emit('cherry-pick:abort', { worktreePath, aborted: true });
     return true;
-  } catch {
+  } catch (err: unknown) {
+    const error = err as { message?: string };
     logger.warn('Failed to abort cherry-pick after conflict');
+    emitter?.emit('cherry-pick:abort', {
+      worktreePath,
+      aborted: false,
+      error: error.message ?? 'Unknown error during cherry-pick abort',
+    });
     return false;
   }
-}
-
-/**
- * Get the current branch name for the worktree.
- *
- * @param worktreePath - Path to the git worktree
- * @returns The current branch name
- */
-export async function getCurrentBranch(worktreePath: string): Promise<string> {
-  const branchOutput = await execGitCommand(['rev-parse', '--abbrev-ref', 'HEAD'], worktreePath);
-  return branchOutput.trim();
 }

@@ -10,10 +10,13 @@ export {
   isAuthenticationError,
   isRateLimitError,
   isQuotaExhaustedError,
+  isModelNotFoundError,
+  isStreamDisconnectedError,
   extractRetryAfter,
   classifyError,
   getUserFriendlyErrorMessage,
   getErrorMessage,
+  logError,
 } from './error-handler.js';
 
 // Conversation utilities

@@ -25,6 +25,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { getHttpApiClient } from '@/lib/http-api-client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { TruncatedFilePath } from '@/components/ui/truncated-file-path';
 import type { FileStatus } from '@/types/electron';
 
 interface WorktreeInfo {
@@ -514,9 +515,10 @@ export function StashChangesDialog({
                             <ChevronRight className="w-3 h-3 text-muted-foreground flex-shrink-0" />
                           )}
                           {getFileIcon(file.status)}
-                          <span className="text-xs font-mono truncate flex-1 text-foreground">
-                            {file.path}
-                          </span>
+                          <TruncatedFilePath
+                            path={file.path}
+                            className="text-xs font-mono flex-1 text-foreground"
+                          />
                           <span
                             className={cn(
                               'text-[10px] px-1.5 py-0.5 rounded border font-medium flex-shrink-0',

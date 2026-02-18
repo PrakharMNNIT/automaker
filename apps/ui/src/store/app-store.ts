@@ -276,6 +276,8 @@ const initialState: AppState = {
   codexApprovalPolicy: 'on-request',
   codexEnableWebSearch: false,
   codexEnableImages: false,
+  codexAdditionalDirs: [],
+  codexThreadId: undefined,
   enabledOpencodeModels: getAllOpencodeModelIds(),
   opencodeDefaultModel: DEFAULT_OPENCODE_MODEL,
   dynamicOpencodeModels: [],

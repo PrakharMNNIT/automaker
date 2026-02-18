@@ -15,7 +15,14 @@ export function parseGitLogOutput(output: string): CommitFields[] {
   const commitBlocks = output.split('\0').filter((block) => block.trim());
 
   for (const block of commitBlocks) {
-    const fields = block.split('\n');
+    const allLines = block.split('\n');
+
+    // Skip leading empty lines that may appear at block boundaries
+    let startIndex = 0;
+    while (startIndex < allLines.length && allLines[startIndex].trim() === '') {
+      startIndex++;
+    }
+    const fields = allLines.slice(startIndex);
 
     // Validate we have all expected fields (at least hash, shortHash, author, authorEmail, date, subject)
     if (fields.length < 6) {

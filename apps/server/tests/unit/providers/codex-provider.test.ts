@@ -247,6 +247,12 @@ describe('codex-provider.ts', () => {
 
     it('uses the SDK when no tools are requested and an API key is present', async () => {
       process.env[OPENAI_API_KEY_ENV] = 'sk-test';
+      // Override auth indicators so CLI-native auth doesn't take priority over API key
+      vi.mocked(getCodexAuthIndicators).mockResolvedValue({
+        hasAuthFile: false,
+        hasOAuthToken: false,
+        hasApiKey: false,
+      });
       codexRunMock.mockResolvedValue({ finalResponse: 'Hello from SDK' });
 
       const results = await collectAsyncGenerator<ProviderMessage>(
@@ -264,6 +270,12 @@ describe('codex-provider.ts', () => {
 
     it('uses the SDK when API key is present, even for tool requests (to avoid OAuth issues)', async () => {
       process.env[OPENAI_API_KEY_ENV] = 'sk-test';
+      // Override auth indicators so CLI-native auth doesn't take priority over API key
+      vi.mocked(getCodexAuthIndicators).mockResolvedValue({
+        hasAuthFile: false,
+        hasOAuthToken: false,
+        hasApiKey: false,
+      });
       vi.mocked(spawnJSONLProcess).mockReturnValue((async function* () {})());
 
       await collectAsyncGenerator(

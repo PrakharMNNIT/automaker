@@ -127,6 +127,7 @@ const eslintConfig = defineConfig([
     },
     rules: {
       ...ts.configs.recommended.rules,
+      'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
       '@typescript-eslint/no-unused-vars': [
         'warn',
@@ -160,6 +161,13 @@ const eslintConfig = defineConfig([
         URL: 'readonly',
         setTimeout: 'readonly',
         console: 'readonly',
+        // Built-in globals used in sw.js
+        Date: 'readonly',
+        Promise: 'readonly',
+        Set: 'readonly',
+        JSON: 'readonly',
+        String: 'readonly',
+        Array: 'readonly',
       },
     },
     rules: {

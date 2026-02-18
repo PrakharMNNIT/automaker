@@ -52,18 +52,28 @@ export const CODEX_MODEL_MAP = {
   // Recommended Codex-specific models
   /** Latest frontier agentic coding model */
   gpt53Codex: 'codex-gpt-5.3-codex',
+  /** Smaller, near-instant version of GPT-5.3-Codex for real-time coding */
+  gpt53CodexSpark: 'codex-gpt-5.3-codex-spark',
   /** Frontier agentic coding model */
   gpt52Codex: 'codex-gpt-5.2-codex',
   /** Codex-optimized flagship for deep and fast reasoning */
   gpt51CodexMax: 'codex-gpt-5.1-codex-max',
   /** Optimized for codex. Cheaper, faster, but less capable */
   gpt51CodexMini: 'codex-gpt-5.1-codex-mini',
+  /** Original GPT-5.1 Codex model */
+  gpt51Codex: 'codex-gpt-5.1-codex',
+  /** Original GPT-5 Codex model */
+  gpt5Codex: 'codex-gpt-5-codex',
+  /** Smaller, cheaper GPT-5 Codex variant */
+  gpt5CodexMini: 'codex-gpt-5-codex-mini',
 
   // General-purpose GPT models (also available in Codex)
   /** Latest frontier model with improvements across knowledge, reasoning and coding */
   gpt52: 'codex-gpt-5.2',
   /** Great for coding and agentic tasks across domains */
   gpt51: 'codex-gpt-5.1',
+  /** Base GPT-5 model */
+  gpt5: 'codex-gpt-5',
 } as const;
 
 export const CODEX_MODEL_IDS = Object.values(CODEX_MODEL_MAP);
@@ -74,10 +84,14 @@ export const CODEX_MODEL_IDS = Object.values(CODEX_MODEL_MAP);
  */
 export const REASONING_CAPABLE_MODELS = new Set([
   CODEX_MODEL_MAP.gpt53Codex,
+  CODEX_MODEL_MAP.gpt53CodexSpark,
   CODEX_MODEL_MAP.gpt52Codex,
   CODEX_MODEL_MAP.gpt51CodexMax,
+  CODEX_MODEL_MAP.gpt51Codex,
+  CODEX_MODEL_MAP.gpt5Codex,
   CODEX_MODEL_MAP.gpt52,
   CODEX_MODEL_MAP.gpt51,
+  CODEX_MODEL_MAP.gpt5,
 ]);
 
 /**

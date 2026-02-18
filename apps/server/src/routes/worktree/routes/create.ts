@@ -22,8 +22,8 @@ import {
   normalizePath,
   ensureInitialCommit,
   isValidBranchName,
-  execGitCommand,
 } from '../common.js';
+import { execGitCommand } from '../../../lib/git.js';
 import { trackBranch } from './branch-tracking.js';
 import { createLogger } from '@automaker/utils';
 import { runInitScript } from '../../../services/init-script-service.js';

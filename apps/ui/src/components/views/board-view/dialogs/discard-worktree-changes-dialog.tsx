@@ -26,6 +26,7 @@ import { getElectronAPI } from '@/lib/electron';
 import { getHttpApiClient } from '@/lib/http-api-client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { TruncatedFilePath } from '@/components/ui/truncated-file-path';
 import type { FileStatus } from '@/types/electron';
 
 interface WorktreeInfo {
@@ -313,9 +314,12 @@ export function DiscardWorktreeChangesDialog({
             const result = await api.git.getDiffs(worktree.path);
             if (result.success) {
               const fileList = result.files ?? [];
+              if (!cancelled) setError(null);
               if (!cancelled) setFiles(fileList);
               if (!cancelled) setDiffContent(result.diff ?? '');
               if (!cancelled) setSelectedFiles(new Set());
+            } else {
+              if (!cancelled) setError(result.error || 'Failed to fetch diffs');
             }
           }
         } catch (err) {
@@ -495,9 +499,10 @@ export function DiscardWorktreeChangesDialog({
                             <ChevronRight className="w-3 h-3 text-muted-foreground flex-shrink-0" />
                           )}
                           {getFileIcon(file.status)}
-                          <span className="text-xs font-mono truncate flex-1 text-foreground">
-                            {file.path}
-                          </span>
+                          <TruncatedFilePath
+                            path={file.path}
+                            className="text-xs font-mono flex-1 text-foreground"
+                          />
                           <span
                             className={cn(
                               'text-[10px] px-1.5 py-0.5 rounded border font-medium flex-shrink-0',

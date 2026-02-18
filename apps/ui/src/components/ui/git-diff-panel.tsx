@@ -13,6 +13,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
+import { TruncatedFilePath } from '@/components/ui/truncated-file-path';
 import { Button } from './button';
 import { useWorktreeDiffs, useGitDiffs } from '@/hooks/queries';
 import type { FileStatus } from '@/types/electron';
@@ -299,9 +300,10 @@ function FileDiffSection({
           <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
         )}
         <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-        <span className="flex-1 text-sm font-mono truncate text-foreground">
-          {fileDiff.filePath}
-        </span>
+        <TruncatedFilePath
+          path={fileDiff.filePath}
+          className="flex-1 text-sm font-mono text-foreground"
+        />
         <div className="flex items-center gap-2 flex-shrink-0">
           {fileDiff.isNew && (
             <span className="text-xs px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">
@@ -596,9 +598,10 @@ export function GitDiffPanel({
                       >
                         <div className="w-full px-3 py-2 flex items-center gap-2 text-left bg-card">
                           {getFileIcon(file.status)}
-                          <span className="flex-1 text-sm font-mono truncate text-foreground">
-                            {file.path}
-                          </span>
+                          <TruncatedFilePath
+                            path={file.path}
+                            className="flex-1 text-sm font-mono text-foreground"
+                          />
                           <span
                             className={cn(
                               'text-xs px-1.5 py-0.5 rounded border font-medium',

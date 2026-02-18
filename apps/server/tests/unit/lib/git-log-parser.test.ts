@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseGitLogOutput } from '../src/lib/git-log-parser.js';
+import { parseGitLogOutput } from '../../../src/lib/git-log-parser.js';
 
 // Mock data: fields within each commit are newline-separated,
 // commits are NUL-separated (matching the parser contract).

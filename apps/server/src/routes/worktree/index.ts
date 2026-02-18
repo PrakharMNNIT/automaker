@@ -126,7 +126,7 @@ export function createWorktreeRoutes(
     requireValidWorktree,
     createListBranchesHandler()
   );
-  router.post('/switch-branch', requireValidWorktree, createSwitchBranchHandler());
+  router.post('/switch-branch', requireValidWorktree, createSwitchBranchHandler(events));
   router.post('/open-in-editor', validatePathParams('worktreePath'), createOpenInEditorHandler());
   router.post(
     '/open-in-terminal',
@@ -210,7 +210,7 @@ export function createWorktreeRoutes(
     '/commit-log',
     validatePathParams('worktreePath'),
     requireValidWorktree,
-    createCommitLogHandler()
+    createCommitLogHandler(events)
   );
 
   // Stash routes
@@ -218,13 +218,13 @@ export function createWorktreeRoutes(
     '/stash-push',
     validatePathParams('worktreePath'),
     requireGitRepoOnly,
-    createStashPushHandler()
+    createStashPushHandler(events)
   );
   router.post(
     '/stash-list',
     validatePathParams('worktreePath'),
     requireGitRepoOnly,
-    createStashListHandler()
+    createStashListHandler(events)
   );
   router.post(
     '/stash-apply',
@@ -236,7 +236,7 @@ export function createWorktreeRoutes(
     '/stash-drop',
     validatePathParams('worktreePath'),
     requireGitRepoOnly,
-    createStashDropHandler()
+    createStashDropHandler(events)
   );
 
   // Cherry-pick route

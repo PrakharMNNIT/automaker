@@ -1,9 +1,13 @@
 /**
- * Service for fetching branch commit log data.
+ * Service for fetching commit log data from a worktree.
  *
  * Extracts the heavy Git command execution and parsing logic from the
- * branch-commit-log route handler so the handler only validates input,
+ * commit-log route handler so the handler only validates input,
  * invokes this service, streams lifecycle events, and sends the response.
+ *
+ * Follows the same approach as branch-commit-log-service: a single
+ * `git log --name-only` call with custom separators to fetch both
+ * commit metadata and file lists, avoiding N+1 git invocations.
  */
 
 import { execGitCommand } from '../lib/git.js';
@@ -12,7 +16,7 @@ import { execGitCommand } from '../lib/git.js';
 // Types
 // ============================================================================
 
-export interface BranchCommit {
+export interface CommitLogEntry {
   hash: string;
   shortHash: string;
   author: string;
@@ -23,9 +27,9 @@ export interface BranchCommit {
   files: string[];
 }
 
-export interface BranchCommitLogResult {
+export interface CommitLogResult {
   branch: string;
-  commits: BranchCommit[];
+  commits: CommitLogEntry[];
   total: number;
 }
 
@@ -34,39 +38,28 @@ export interface BranchCommitLogResult {
 // ============================================================================
 
 /**
- * Fetch the commit log for a specific branch (or HEAD).
+ * Fetch the commit log for a worktree (HEAD).
  *
- * Runs a single `git log --name-only` invocation (plus `git rev-parse`
- * when branchName is omitted) inside the given worktree path and
- * returns a structured result.
+ * Runs a single `git log --name-only` invocation plus `git rev-parse`
+ * inside the given worktree path and returns a structured result.
  *
  * @param worktreePath - Absolute path to the worktree / repository
- * @param branchName   - Branch to query (omit or pass undefined for HEAD)
  * @param limit        - Maximum number of commits to return (clamped 1-100)
  */
-export async function getBranchCommitLog(
-  worktreePath: string,
-  branchName: string | undefined,
-  limit: number
-): Promise<BranchCommitLogResult> {
+export async function getCommitLog(worktreePath: string, limit: number): Promise<CommitLogResult> {
   // Clamp limit to a reasonable range
   const parsedLimit = Number(limit);
   const commitLimit = Math.min(Math.max(1, Number.isFinite(parsedLimit) ? parsedLimit : 20), 100);
 
-  // Use the specified branch or default to HEAD
-  const targetRef = branchName || 'HEAD';
-
-  // Fetch commit metadata AND file lists in a single git call.
-  // Uses custom record separators so we can parse both metadata and
-  // --name-only output from one invocation, eliminating the previous
-  // N+1 pattern that spawned a separate `git diff-tree` per commit.
+  // Use custom separators to parse both metadata and file lists from
+  // a single git log invocation (same approach as branch-commit-log-service).
   //
   // -m causes merge commits to be diffed against each parent so all
   // files touched by the merge are listed (without -m, --name-only
   // produces no file output for merge commits because they have 2+ parents).
   // This means merge commits appear multiple times in the output (once per
   // parent), so we deduplicate by hash below and merge their file lists.
-  // We over-fetch (2× the limit) to compensate for -m duplicating merge
+  // We over-fetch (2x the limit) to compensate for -m duplicating merge
   // commit entries, then trim the result to the requested limit.
   // Use ASCII control characters as record separators – these cannot appear in
   // git commit messages, so these delimiters are safe regardless of commit
@@ -85,7 +78,6 @@ export async function getBranchCommitLog(
   const logOutput = await execGitCommand(
     [
       'log',
-      targetRef,
       `--max-count=${fetchLimit}`,
       '-m',
       '--name-only',
@@ -100,7 +92,7 @@ export async function getBranchCommitLog(
 
   // Use a Map to deduplicate merge commit entries (which appear once per
   // parent when -m is used) while preserving insertion order.
-  const commitMap = new Map<string, BranchCommit>();
+  const commitMap = new Map<string, CommitLogEntry>();
 
   for (const block of commitBlocks) {
     const metaEndIdx = block.indexOf(META_END);
@@ -157,15 +149,12 @@ export async function getBranchCommitLog(
   // Trim to the requested limit (we over-fetched to account for -m duplicates)
   const commits = [...commitMap.values()].slice(0, commitLimit);
 
-  // If branchName wasn't specified, get current branch for display
-  let displayBranch = branchName;
-  if (!displayBranch) {
-    const branchOutput = await execGitCommand(['rev-parse', '--abbrev-ref', 'HEAD'], worktreePath);
-    displayBranch = branchOutput.trim();
-  }
+  // Get current branch name
+  const branchOutput = await execGitCommand(['rev-parse', '--abbrev-ref', 'HEAD'], worktreePath);
+  const branch = branchOutput.trim();
 
   return {
-    branch: displayBranch,
+    branch,
     commits,
     total: commits.length,
   };

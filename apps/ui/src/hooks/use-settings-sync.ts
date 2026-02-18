@@ -95,6 +95,14 @@ const SETTINGS_FIELDS_TO_SYNC = [
   'projectHistory',
   'projectHistoryIndex',
   'lastSelectedSessionByProject',
+  // Codex CLI Settings
+  'codexAutoLoadAgents',
+  'codexSandboxMode',
+  'codexApprovalPolicy',
+  'codexEnableWebSearch',
+  'codexEnableImages',
+  'codexAdditionalDirs',
+  'codexThreadId',
   // UI State (previously in localStorage)
   'worktreePanelCollapsed',
   'lastProjectDir',
@@ -736,6 +744,14 @@ export async function refreshSettingsFromServer(): Promise<boolean> {
       recentFolders: serverSettings.recentFolders ?? [],
       // Event hooks
       eventHooks: serverSettings.eventHooks ?? [],
+      // Codex CLI Settings
+      codexAutoLoadAgents: serverSettings.codexAutoLoadAgents ?? false,
+      codexSandboxMode: serverSettings.codexSandboxMode ?? 'workspace-write',
+      codexApprovalPolicy: serverSettings.codexApprovalPolicy ?? 'on-request',
+      codexEnableWebSearch: serverSettings.codexEnableWebSearch ?? false,
+      codexEnableImages: serverSettings.codexEnableImages ?? true,
+      codexAdditionalDirs: serverSettings.codexAdditionalDirs ?? [],
+      codexThreadId: serverSettings.codexThreadId,
       // Terminal settings (nested in terminalState)
       ...((serverSettings.terminalFontFamily || serverSettings.openTerminalMode) && {
         terminalState: {
