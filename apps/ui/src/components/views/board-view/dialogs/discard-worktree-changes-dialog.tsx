@@ -304,6 +304,8 @@ export function DiscardWorktreeChangesDialog({
       setExpandedFile(null);
       setError(null);
 
+      let cancelled = false;
+
       const loadDiffs = async () => {
         try {
           const api = getElectronAPI();
@@ -311,21 +313,25 @@ export function DiscardWorktreeChangesDialog({
             const result = await api.git.getDiffs(worktree.path);
             if (result.success) {
               const fileList = result.files ?? [];
-              setFiles(fileList);
-              setDiffContent(result.diff ?? '');
-              // No files selected by default
-              setSelectedFiles(new Set());
+              if (!cancelled) setFiles(fileList);
+              if (!cancelled) setDiffContent(result.diff ?? '');
+              if (!cancelled) setSelectedFiles(new Set());
             }
           }
         } catch (err) {
+          if (cancelled) return;
           console.warn('Failed to load diffs for discard dialog:', err);
           setError(err instanceof Error ? err.message : String(err));
         } finally {
-          setIsLoadingDiffs(false);
+          if (!cancelled) setIsLoadingDiffs(false);
         }
       };
 
       loadDiffs();
+
+      return () => {
+        cancelled = true;
+      };
     }
   }, [open, worktree]);
 
