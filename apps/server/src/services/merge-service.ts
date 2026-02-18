@@ -5,7 +5,7 @@
  */
 
 import { createLogger } from '@automaker/utils';
-import { createEventEmitter } from '../lib/events';
+import { createEventEmitter } from '../lib/events.js';
 import { execGitCommand } from '../lib/git.js';
 const logger = createLogger('MergeService');
 

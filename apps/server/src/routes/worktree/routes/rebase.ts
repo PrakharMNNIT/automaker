@@ -98,7 +98,7 @@ export function createRebaseHandler(events: EventEmitter) {
         });
       } else {
         // Emit failure event for non-conflict failures
-        events.emit('rebase:failed', {
+        events.emit('rebase:failure', {
           worktreePath: resolvedWorktreePath,
           branch: result.branch,
           ontoBranch: result.ontoBranch,
