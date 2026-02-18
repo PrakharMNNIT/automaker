@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createLogger } from '@automaker/utils/logger';
 import {
   Dialog,
@@ -11,21 +11,22 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectSeparator,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from '@/components/ui/command';
 import { getElectronAPI } from '@/lib/electron';
 import { getHttpApiClient } from '@/lib/http-api-client';
 import { toast } from 'sonner';
-import { GitBranchPlus, RefreshCw } from 'lucide-react';
+import { Check, ChevronsUpDown, GitBranchPlus, Globe, RefreshCw } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
+import { cn } from '@/lib/utils';
 
 interface WorktreeInfo {
   path: string;
@@ -62,6 +63,9 @@ export function CreateBranchDialog({
   const [isLoadingBranches, setIsLoadingBranches] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [baseBranchPopoverOpen, setBaseBranchPopoverOpen] = useState(false);
+  const baseBranchTriggerRef = useRef<HTMLButtonElement>(null);
+  const [baseBranchTriggerWidth, setBaseBranchTriggerWidth] = useState<number>(0);
 
   const fetchBranches = useCallback(async () => {
     if (!worktree) return;
@@ -93,9 +97,22 @@ export function CreateBranchDialog({
       setBaseBranch('');
       setError(null);
       setBranches([]);
+      setBaseBranchPopoverOpen(false);
       fetchBranches();
     }
   }, [open, fetchBranches]);
+
+  // Track trigger width for popover sizing
+  useEffect(() => {
+    const el = baseBranchTriggerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => {
+      setBaseBranchTriggerWidth(el.offsetWidth);
+    });
+    observer.observe(el);
+    setBaseBranchTriggerWidth(el.offsetWidth);
+    return () => observer.disconnect();
+  }, [baseBranchPopoverOpen]);
 
   const handleCreate = async () => {
     if (!worktree || !branchName.trim()) return;
@@ -141,8 +158,16 @@ export function CreateBranchDialog({
   };
 
   // Separate local and remote branches
-  const localBranches = branches.filter((b) => !b.isRemote);
-  const remoteBranches = branches.filter((b) => b.isRemote);
+  const localBranches = useMemo(() => branches.filter((b) => !b.isRemote), [branches]);
+  const remoteBranches = useMemo(() => branches.filter((b) => b.isRemote), [branches]);
+
+  // Display label for the selected base branch
+  const baseBranchDisplayLabel = useMemo(() => {
+    if (!baseBranch) return null;
+    const found = branches.find((b) => b.name === baseBranch);
+    if (!found) return baseBranch;
+    return found.isCurrent ? `${found.name} (current)` : found.name;
+  }, [baseBranch, branches]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -200,44 +225,94 @@ export function CreateBranchDialog({
                 <span className="text-sm text-muted-foreground">Loading branches...</span>
               </div>
             ) : (
-              <Select value={baseBranch} onValueChange={setBaseBranch} disabled={isCreating}>
-                <SelectTrigger id="base-branch">
-                  <SelectValue placeholder="Select base branch" />
-                </SelectTrigger>
-                <SelectContent>
-                  {localBranches.length > 0 && (
-                    <SelectGroup>
-                      <SelectLabel>Local Branches</SelectLabel>
-                      {localBranches.map((branch) => (
-                        <SelectItem key={branch.name} value={branch.name}>
-                          <span className={branch.isCurrent ? 'font-medium' : ''}>
-                            {branch.name}
-                            {branch.isCurrent ? ' (current)' : ''}
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  )}
-                  {remoteBranches.length > 0 && (
-                    <>
-                      {localBranches.length > 0 && <SelectSeparator />}
-                      <SelectGroup>
-                        <SelectLabel>Remote Branches</SelectLabel>
-                        {remoteBranches.map((branch) => (
-                          <SelectItem key={branch.name} value={branch.name}>
-                            {branch.name}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </>
-                  )}
-                  {localBranches.length === 0 && remoteBranches.length === 0 && (
-                    <SelectItem value="HEAD" disabled>
-                      No branches found
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
+              <Popover open={baseBranchPopoverOpen} onOpenChange={setBaseBranchPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    id="base-branch"
+                    ref={baseBranchTriggerRef}
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={baseBranchPopoverOpen}
+                    disabled={isCreating}
+                    className="w-full justify-between font-normal"
+                  >
+                    <span className="truncate text-sm">
+                      {baseBranchDisplayLabel ?? (
+                        <span className="text-muted-foreground">Select base branch</span>
+                      )}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  className="p-0"
+                  style={{ width: Math.max(baseBranchTriggerWidth, 200) }}
+                  onWheel={(e) => e.stopPropagation()}
+                  onTouchMove={(e) => e.stopPropagation()}
+                >
+                  <Command shouldFilter={true}>
+                    <CommandInput placeholder="Filter branches..." className="h-9" />
+                    <CommandList>
+                      <CommandEmpty>No matching branches</CommandEmpty>
+                      {localBranches.length > 0 && (
+                        <CommandGroup heading="Local Branches">
+                          {localBranches.map((branch) => (
+                            <CommandItem
+                              key={branch.name}
+                              value={branch.name}
+                              onSelect={(value) => {
+                                setBaseBranch(value);
+                                setBaseBranchPopoverOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  'mr-2 h-4 w-4 shrink-0',
+                                  baseBranch === branch.name ? 'opacity-100' : 'opacity-0'
+                                )}
+                              />
+                              <span className={cn('truncate', branch.isCurrent && 'font-medium')}>
+                                {branch.name}
+                              </span>
+                              {branch.isCurrent && (
+                                <span className="ml-1.5 text-xs text-muted-foreground shrink-0">
+                                  (current)
+                                </span>
+                              )}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      )}
+                      {remoteBranches.length > 0 && (
+                        <>
+                          {localBranches.length > 0 && <CommandSeparator />}
+                          <CommandGroup heading="Remote Branches">
+                            {remoteBranches.map((branch) => (
+                              <CommandItem
+                                key={branch.name}
+                                value={branch.name}
+                                onSelect={(value) => {
+                                  setBaseBranch(value);
+                                  setBaseBranchPopoverOpen(false);
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    'mr-2 h-4 w-4 shrink-0',
+                                    baseBranch === branch.name ? 'opacity-100' : 'opacity-0'
+                                  )}
+                                />
+                                <Globe className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                                <span className="truncate">{branch.name}</span>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </>
+                      )}
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             )}
           </div>
 
