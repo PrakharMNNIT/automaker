@@ -1,6 +1,14 @@
 /**
  * POST /checkout-branch endpoint - Create and checkout a new branch
  *
+ * Supports automatic stash handling: when `stashChanges` is true, local changes
+ * are stashed before creating the branch and reapplied after. If the stash pop
+ * results in merge conflicts, returns a special response so the UI can create a
+ * conflict resolution task.
+ *
+ * Git business logic is delegated to checkout-branch-service.ts when stash
+ * handling is requested. Otherwise, falls back to the original simple flow.
+ *
  * Note: Git repository validation (isGitRepo, hasCommits) is handled by
  * the requireValidWorktree middleware in index.ts.
  * Path validation (ALLOWED_ROOT_DIRECTORY) is handled by validatePathParams
@@ -12,14 +20,20 @@ import path from 'path';
 import { stat } from 'fs/promises';
 import { getErrorMessage, logError, isValidBranchName } from '../common.js';
 import { execGitCommand } from '../../../lib/git.js';
+import type { EventEmitter } from '../../../lib/events.js';
+import { performCheckoutBranch } from '../../../services/checkout-branch-service.js';
 
-export function createCheckoutBranchHandler() {
+export function createCheckoutBranchHandler(events?: EventEmitter) {
   return async (req: Request, res: Response): Promise<void> => {
     try {
-      const { worktreePath, branchName, baseBranch } = req.body as {
+      const { worktreePath, branchName, baseBranch, stashChanges, includeUntracked } = req.body as {
         worktreePath: string;
         branchName: string;
-        baseBranch?: string; // Optional base branch to create from (defaults to current HEAD)
+        baseBranch?: string;
+        /** When true, stash local changes before checkout and reapply after */
+        stashChanges?: boolean;
+        /** When true, include untracked files in the stash (defaults to true) */
+        includeUntracked?: boolean;
       };
 
       if (!worktreePath) {
@@ -59,8 +73,6 @@ export function createCheckoutBranchHandler() {
       }
 
       // Resolve and validate worktreePath to prevent traversal attacks.
-      // The validatePathParams middleware checks against ALLOWED_ROOT_DIRECTORY,
-      // but we also resolve the path and verify it exists as a directory.
       const resolvedPath = path.resolve(worktreePath);
       try {
         const stats = await stat(resolvedPath);
@@ -79,7 +91,42 @@ export function createCheckoutBranchHandler() {
         return;
       }
 
-      // Get current branch for reference (using argument array to avoid shell injection)
+      // Use the service for stash-aware checkout
+      if (stashChanges) {
+        const result = await performCheckoutBranch(
+          resolvedPath,
+          branchName,
+          baseBranch,
+          {
+            stashChanges: true,
+            includeUntracked: includeUntracked ?? true,
+          },
+          events
+        );
+
+        if (!result.success) {
+          const statusCode = isBranchError(result.error) ? 400 : 500;
+          res.status(statusCode).json({
+            success: false,
+            error: result.error,
+            ...(result.stashPopConflicts !== undefined && {
+              stashPopConflicts: result.stashPopConflicts,
+            }),
+            ...(result.stashPopConflictMessage && {
+              stashPopConflictMessage: result.stashPopConflictMessage,
+            }),
+          });
+          return;
+        }
+
+        res.json({
+          success: true,
+          result: result.result,
+        });
+        return;
+      }
+
+      // Original simple flow (no stash handling)
       const currentBranchOutput = await execGitCommand(
         ['rev-parse', '--abbrev-ref', 'HEAD'],
         resolvedPath
@@ -89,7 +136,6 @@ export function createCheckoutBranchHandler() {
       // Check if branch already exists
       try {
         await execGitCommand(['rev-parse', '--verify', branchName], resolvedPath);
-        // Branch exists
         res.status(400).json({
           success: false,
           error: `Branch '${branchName}' already exists`,
@@ -112,8 +158,7 @@ export function createCheckoutBranchHandler() {
         }
       }
 
-      // Create and checkout the new branch (using argument array to avoid shell injection)
-      // If baseBranch is provided, create the branch from that starting point
+      // Create and checkout the new branch
       const checkoutArgs = ['checkout', '-b', branchName];
       if (baseBranch) {
         checkoutArgs.push(baseBranch);
@@ -129,8 +174,24 @@ export function createCheckoutBranchHandler() {
         },
       });
     } catch (error) {
+      events?.emit('switch:error', {
+        error: getErrorMessage(error),
+      });
+
       logError(error, 'Checkout branch failed');
       res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
   };
+}
+
+/**
+ * Determine whether an error message represents a client error (400)
+ */
+function isBranchError(error?: string): boolean {
+  if (!error) return false;
+  return (
+    error.includes('already exists') ||
+    error.includes('does not exist') ||
+    error.includes('Failed to stash')
+  );
 }

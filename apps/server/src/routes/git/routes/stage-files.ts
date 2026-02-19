@@ -2,11 +2,9 @@
  * POST /stage-files endpoint - Stage or unstage files in the main project
  */
 
-import fs from 'fs';
-import path from 'path';
 import type { Request, Response } from 'express';
 import { getErrorMessage, logError } from '../common.js';
-import { execGitCommand } from '../../../lib/git.js';
+import { stageFiles, StageFilesValidationError } from '../../../services/stage-files-service.js';
 
 export function createStageFilesHandler() {
   return async (req: Request, res: Response): Promise<void> => {
@@ -51,67 +49,17 @@ export function createStageFilesHandler() {
         return;
       }
 
-      // Resolve the canonical (symlink-dereferenced) project path so that
-      // startsWith(base) reliably prevents symlink traversal attacks.
-      // If projectPath does not exist or is unreadable, realpath rejects and
-      // we return a 400 instead of letting the error propagate as a 500.
-      let canonicalRoot: string;
-      try {
-        canonicalRoot = await fs.promises.realpath(projectPath);
-      } catch {
-        res.status(400).json({
-          success: false,
-          error: `Invalid projectPath (non-existent or unreadable): ${projectPath}`,
-        });
-        return;
-      }
-
-      // Validate and sanitize each file path to prevent path traversal attacks
-      const base = path.resolve(canonicalRoot) + path.sep;
-      const sanitizedFiles: string[] = [];
-      for (const file of files) {
-        // Reject absolute paths
-        if (path.isAbsolute(file)) {
-          res.status(400).json({
-            success: false,
-            error: `Invalid file path (absolute paths not allowed): ${file}`,
-          });
-          return;
-        }
-        // Reject entries containing '..'
-        if (file.includes('..')) {
-          res.status(400).json({
-            success: false,
-            error: `Invalid file path (path traversal not allowed): ${file}`,
-          });
-          return;
-        }
-        // Ensure the resolved path stays within the project directory
-        const resolved = path.resolve(path.join(canonicalRoot, file));
-        if (resolved !== path.resolve(canonicalRoot) && !resolved.startsWith(base)) {
-          res.status(400).json({
-            success: false,
-            error: `Invalid file path (outside project directory): ${file}`,
-          });
-          return;
-        }
-        sanitizedFiles.push(file);
-      }
-
-      if (operation === 'stage') {
-        await execGitCommand(['add', '--', ...sanitizedFiles], canonicalRoot);
-      } else {
-        await execGitCommand(['reset', 'HEAD', '--', ...sanitizedFiles], canonicalRoot);
-      }
+      const result = await stageFiles(projectPath, files, operation);
 
       res.json({
         success: true,
-        result: {
-          operation,
-          filesCount: sanitizedFiles.length,
-        },
+        result,
       });
     } catch (error) {
+      if (error instanceof StageFilesValidationError) {
+        res.status(400).json({ success: false, error: error.message });
+        return;
+      }
       logError(error, `${(req.body as { operation?: string })?.operation ?? 'stage'} files failed`);
       res.status(500).json({ success: false, error: getErrorMessage(error) });
     }

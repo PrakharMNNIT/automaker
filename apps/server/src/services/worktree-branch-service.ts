@@ -190,7 +190,12 @@ async function isRemoteBranch(cwd: string, branchName: string): Promise<boolean>
       .map((b) => b.trim().replace(/^['"]|['"]$/g, ''))
       .filter((b) => b);
     return remoteBranches.includes(branchName);
-  } catch {
+  } catch (err) {
+    logger.error('isRemoteBranch: failed to list remote branches — returning false', {
+      branchName,
+      cwd,
+      error: getErrorMessage(err),
+    });
     return false;
   }
 }

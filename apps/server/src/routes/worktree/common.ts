@@ -2,7 +2,7 @@
  * Common utilities for worktree routes
  */
 
-import { createLogger } from '@automaker/utils';
+import { createLogger, isValidBranchName, MAX_BRANCH_NAME_LENGTH } from '@automaker/utils';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { getErrorMessage as getErrorMessageShared, createLogError } from '../common.js';
@@ -14,12 +14,9 @@ export { execGitCommand } from '../../lib/git.js';
 const logger = createLogger('Worktree');
 export const execAsync = promisify(exec);
 
-// ============================================================================
-// Constants
-// ============================================================================
-
-/** Maximum allowed length for git branch names */
-export const MAX_BRANCH_NAME_LENGTH = 250;
+// Re-export git validation utilities from the canonical shared module so
+// existing consumers that import from this file continue to work.
+export { isValidBranchName, MAX_BRANCH_NAME_LENGTH };
 
 // ============================================================================
 // Extended PATH configuration for Electron apps
@@ -62,22 +59,6 @@ export const execEnv = {
   ...process.env,
   PATH: extendedPath,
 };
-
-// ============================================================================
-// Validation utilities
-// ============================================================================
-
-/**
- * Validate branch name to prevent command injection.
- * Git branch names cannot contain: space, ~, ^, :, ?, *, [, \, or control chars.
- * We also reject shell metacharacters for safety.
- * The first character must not be '-' to prevent git argument injection.
- */
-export function isValidBranchName(name: string): boolean {
-  // First char must be alphanumeric, dot, underscore, or slash (not dash)
-  // to prevent git option injection via names like "-flag" or "--option".
-  return /^[a-zA-Z0-9._/][a-zA-Z0-9._\-/]*$/.test(name) && name.length < MAX_BRANCH_NAME_LENGTH;
-}
 
 /**
  * Validate git remote name to prevent command injection.

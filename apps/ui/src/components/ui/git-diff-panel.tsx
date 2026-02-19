@@ -534,8 +534,14 @@ export function GitDiffPanel({
       onStart: () => void,
       onFinally: () => void
     ) => {
-      if (!worktreePath && !projectPath) return;
       onStart();
+      if (!worktreePath && !projectPath) {
+        toast.error(failurePrefix, {
+          description: 'No project or worktree path configured',
+        });
+        onFinally();
+        return;
+      }
       try {
         const api = getElectronAPI();
         let result: { success: boolean; error?: string } | undefined;

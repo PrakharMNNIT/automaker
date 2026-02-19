@@ -43,6 +43,7 @@ import {
   CherryPickDialog,
   GitPullDialog,
 } from '../dialogs';
+import { StashConfirmDialog } from '../dialogs/stash-confirm-dialog';
 import type { SelectRemoteOperation } from '../dialogs';
 import { TestLogsPanel } from '@/components/ui/test-logs-panel';
 import { getElectronAPI } from '@/lib/electron';
@@ -114,6 +115,9 @@ export function WorktreePanel({
     handleOpenInIntegratedTerminal,
     handleOpenInEditor,
     handleOpenInExternalTerminal,
+    pendingSwitch,
+    confirmPendingSwitch,
+    cancelPendingSwitch,
   } = useWorktreeActions({
     onBranchSwitchConflict: onBranchSwitchConflict,
     onStashPopConflict: onStashPopConflict,
@@ -880,6 +884,20 @@ export function WorktreePanel({
           onStashed={handleStashCompleted}
         />
 
+        {/* Stash Confirm Dialog for Branch Switching */}
+        <StashConfirmDialog
+          open={!!pendingSwitch}
+          onOpenChange={(isOpen) => {
+            if (!isOpen) cancelPendingSwitch();
+          }}
+          operationDescription={
+            pendingSwitch ? `switch to branch '${pendingSwitch.branchName}'` : ''
+          }
+          changesInfo={pendingSwitch?.changesInfo ?? null}
+          onConfirm={confirmPendingSwitch}
+          isLoading={isSwitching}
+        />
+
         {/* View Stashes Dialog */}
         <ViewStashesDialog
           open={viewStashesDialogOpen}
@@ -1326,6 +1344,18 @@ export function WorktreePanel({
         onOpenChange={setStashChangesDialogOpen}
         worktree={stashChangesWorktree}
         onStashed={handleStashCompleted}
+      />
+
+      {/* Stash Confirm Dialog for Branch Switching */}
+      <StashConfirmDialog
+        open={!!pendingSwitch}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) cancelPendingSwitch();
+        }}
+        operationDescription={pendingSwitch ? `switch to branch '${pendingSwitch.branchName}'` : ''}
+        changesInfo={pendingSwitch?.changesInfo ?? null}
+        onConfirm={confirmPendingSwitch}
+        isLoading={isSwitching}
       />
 
       {/* View Stashes Dialog */}

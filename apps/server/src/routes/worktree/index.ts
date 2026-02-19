@@ -66,6 +66,7 @@ import { createRebaseHandler } from './routes/rebase.js';
 import { createAbortOperationHandler } from './routes/abort-operation.js';
 import { createContinueOperationHandler } from './routes/continue-operation.js';
 import { createStageFilesHandler } from './routes/stage-files.js';
+import { createCheckChangesHandler } from './routes/check-changes.js';
 import type { SettingsService } from '../../services/settings-service.js';
 
 export function createWorktreeRoutes(
@@ -121,7 +122,13 @@ export function createWorktreeRoutes(
     '/checkout-branch',
     validatePathParams('worktreePath'),
     requireValidWorktree,
-    createCheckoutBranchHandler()
+    createCheckoutBranchHandler(events)
+  );
+  router.post(
+    '/check-changes',
+    validatePathParams('worktreePath'),
+    requireGitRepoOnly,
+    createCheckChangesHandler()
   );
   router.post(
     '/list-branches',

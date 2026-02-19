@@ -4,7 +4,7 @@
  * Extracted from worktree merge route to allow internal service calls.
  */
 
-import { createLogger } from '@automaker/utils';
+import { createLogger, isValidBranchName } from '@automaker/utils';
 import { type EventEmitter } from '../lib/events.js';
 import { execGitCommand } from '../lib/git.js';
 const logger = createLogger('MergeService');
@@ -26,19 +26,6 @@ export interface MergeServiceResult {
     worktreeDeleted: boolean;
     branchDeleted: boolean;
   };
-}
-
-/**
- * Validate branch name to prevent command injection.
- * The first character must not be '-' to prevent git argument injection
- * via names like "-flag" or "--option".
- */
-function isValidBranchName(name: string): boolean {
-  // First char must be alphanumeric, dot, underscore, or slash (not dash)
-  // Reject names containing '..' to prevent git ref traversal
-  return (
-    /^[a-zA-Z0-9._/][a-zA-Z0-9._\-/]*$/.test(name) && name.length < 250 && !name.includes('..')
-  );
 }
 
 /**
@@ -111,30 +98,76 @@ export async function performMerge(
     : ['merge', branchName, '-m', mergeMessage];
 
   try {
-    await execGitCommand(mergeArgs, projectPath);
+    // Set LC_ALL=C so git always emits English output regardless of the system
+    // locale, making text-based conflict detection reliable.
+    await execGitCommand(mergeArgs, projectPath, { LC_ALL: 'C' });
   } catch (mergeError: unknown) {
-    // Check if this is a merge conflict
+    // Check if this is a merge conflict.  We use a multi-layer strategy so
+    // that detection is reliable even when locale settings vary or git's text
+    // output changes across versions:
+    //
+    //  1. Primary (text-based): scan the error output for well-known English
+    //     conflict markers.  Because we pass LC_ALL=C above these strings are
+    //     always in English, but we keep the check as one layer among several.
+    //
+    //  2. Unmerged-path check: run `git diff --name-only --diff-filter=U`
+    //     (locale-stable) and treat any non-empty output as a conflict
+    //     indicator, capturing the file list at the same time.
+    //
+    //  3. Fallback status check: run `git status --porcelain` and look for
+    //     lines whose first two characters indicate an unmerged state
+    //     (UU, AA, DD, AU, UA, DU, UD).
+    //
+    // hasConflicts is true when ANY of the three layers returns positive.
     const err = mergeError as { stdout?: string; stderr?: string; message?: string };
     const output = `${err.stdout || ''} ${err.stderr || ''} ${err.message || ''}`;
-    const hasConflicts = output.includes('CONFLICT') || output.includes('Automatic merge failed');
+
+    // Layer 1 – text matching (locale-safe because we set LC_ALL=C above).
+    const textIndicatesConflict =
+      output.includes('CONFLICT') || output.includes('Automatic merge failed');
+
+    // Layers 2 & 3 – repository state inspection (locale-independent).
+    // Layer 2: get conflicted files via diff (also locale-stable output).
+    let conflictFiles: string[] | undefined;
+    let diffIndicatesConflict = false;
+    try {
+      const diffOutput = await execGitCommand(
+        ['diff', '--name-only', '--diff-filter=U'],
+        projectPath,
+        { LC_ALL: 'C' }
+      );
+      const files = diffOutput
+        .trim()
+        .split('\n')
+        .filter((f) => f.trim().length > 0);
+      if (files.length > 0) {
+        diffIndicatesConflict = true;
+        conflictFiles = files;
+      }
+    } catch {
+      // If we can't get the file list, leave conflictFiles undefined so callers
+      // can distinguish "no conflicts" (empty array) from "unknown due to diff failure" (undefined)
+    }
+
+    // Layer 3: check for unmerged paths via machine-readable git status.
+    let hasUnmergedPaths = false;
+    try {
+      const statusOutput = await execGitCommand(['status', '--porcelain'], projectPath, {
+        LC_ALL: 'C',
+      });
+      // Unmerged status codes occupy the first two characters of each line.
+      // Standard unmerged codes: UU, AA, DD, AU, UA, DU, UD.
+      hasUnmergedPaths = statusOutput
+        .split('\n')
+        .some((line) => /^(UU|AA|DD|AU|UA|DU|UD)/.test(line));
+    } catch {
+      // git status failing is itself a sign something is wrong; leave
+      // hasUnmergedPaths as false and rely on the other layers.
+    }
+
+    const hasConflicts = textIndicatesConflict || diffIndicatesConflict || hasUnmergedPaths;
 
     if (hasConflicts) {
-      // Get list of conflicted files
-      let conflictFiles: string[] | undefined;
-      try {
-        const diffOutput = await execGitCommand(
-          ['diff', '--name-only', '--diff-filter=U'],
-          projectPath
-        );
-        conflictFiles = diffOutput
-          .trim()
-          .split('\n')
-          .filter((f) => f.trim().length > 0);
-      } catch {
-        // If we can't get the file list, leave conflictFiles undefined so callers
-        // can distinguish "no conflicts" (empty array) from "unknown due to diff failure" (undefined)
-      }
-
       // Emit merge:conflict event with conflict details
       emitter?.emit('merge:conflict', { branchName, targetBranch: mergeTo, conflictFiles });
 

@@ -3,6 +3,9 @@
  * Git operations utilities for AutoMaker
  */
 
+// Export command execution utilities
+export { execGitCommand } from './exec.js';
+
 // Export types and constants
 export { BINARY_EXTENSIONS, GIT_STATUS_MAP, type FileStatus } from './types.js';
 

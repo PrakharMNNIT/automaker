@@ -1026,20 +1026,39 @@ export interface WorktreeAPI {
     code?: 'NOT_GIT_REPO' | 'NO_COMMITS';
   }>;
 
-  // Create and checkout a new branch
+  // Check for uncommitted changes in a worktree
+  checkChanges: (worktreePath: string) => Promise<{
+    success: boolean;
+    result?: {
+      hasChanges: boolean;
+      staged: string[];
+      unstaged: string[];
+      untracked: string[];
+      totalFiles: number;
+    };
+    error?: string;
+  }>;
+
+  // Create and checkout a new branch (with optional stash handling)
   checkoutBranch: (
     worktreePath: string,
     branchName: string,
-    baseBranch?: string
+    baseBranch?: string,
+    stashChanges?: boolean,
+    includeUntracked?: boolean
   ) => Promise<{
     success: boolean;
     result?: {
       previousBranch: string;
       newBranch: string;
       message: string;
+      hasConflicts?: boolean;
+      stashedChanges?: boolean;
     };
     error?: string;
     code?: 'NOT_GIT_REPO' | 'NO_COMMITS';
+    stashPopConflicts?: boolean;
+    stashPopConflictMessage?: string;
   }>;
 
   // List branches (local and optionally remote)

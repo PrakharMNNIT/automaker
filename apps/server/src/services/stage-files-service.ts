@@ -68,6 +68,14 @@ export async function stageFiles(
   const base = canonicalRoot + path.sep;
   const sanitizedFiles: string[] = [];
   for (const file of files) {
+    // Reject empty or whitespace-only paths — path.resolve(canonicalRoot, '')
+    // returns canonicalRoot itself, so without this guard an empty string would
+    // pass all subsequent checks and be forwarded to git unchanged.
+    if (file.trim() === '') {
+      throw new StageFilesValidationError(
+        'Invalid file path (empty or whitespace-only paths not allowed)'
+      );
+    }
     // Reject absolute paths
     if (path.isAbsolute(file)) {
       throw new StageFilesValidationError(

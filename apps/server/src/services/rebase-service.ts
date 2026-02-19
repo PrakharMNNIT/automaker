@@ -7,7 +7,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
-import { createLogger } from '@automaker/utils';
+import { createLogger, getErrorMessage } from '@automaker/utils';
 import { getConflictFiles } from '@automaker/git-utils';
 import { execGitCommand, getCurrentBranch } from '../lib/git.js';
 
@@ -50,7 +50,15 @@ export async function runRebase(worktreePath: string, ontoBranch: string): Promi
   }
 
   // Get current branch name before rebase
-  const currentBranch = await getCurrentBranch(worktreePath);
+  let currentBranch: string;
+  try {
+    currentBranch = await getCurrentBranch(worktreePath);
+  } catch (branchErr) {
+    return {
+      success: false,
+      error: `Failed to resolve current branch for worktree "${worktreePath}": ${getErrorMessage(branchErr)}`,
+    };
+  }
 
   try {
     // Pass ontoBranch after '--' so git treats it as a ref, not an option.

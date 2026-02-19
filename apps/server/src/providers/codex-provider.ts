@@ -57,6 +57,7 @@ const CODEX_MODEL_FLAG = '--model';
 const CODEX_VERSION_FLAG = '--version';
 const CODEX_CONFIG_FLAG = '--config';
 const CODEX_ADD_DIR_FLAG = '--add-dir';
+const CODEX_OUTPUT_SCHEMA_FLAG = '--output-schema';
 const CODEX_SKIP_GIT_REPO_CHECK_FLAG = '--skip-git-repo-check';
 const CODEX_REASONING_EFFORT_KEY = 'reasoning_effort';
 const CODEX_YOLO_FLAG = '--dangerously-bypass-approvals-and-sandbox';
@@ -200,6 +201,12 @@ function isSdkEligible(options: ExecuteOptions): boolean {
   return isNoToolsRequested(options) && !hasMcpServersConfigured(options);
 }
 
+function isSdkEligibleWithApiKey(options: ExecuteOptions): boolean {
+  // When using an API key (not CLI OAuth), prefer SDK over CLI to avoid OAuth issues.
+  // SDK mode is used when MCP servers are not configured (MCP requires CLI).
+  return !hasMcpServersConfigured(options);
+}
+
 async function resolveCodexExecutionPlan(options: ExecuteOptions): Promise<CodexExecutionPlan> {
   const cliPath = await findCodexCliPath();
   const authIndicators = await getCodexAuthIndicators();
@@ -225,10 +232,22 @@ async function resolveCodexExecutionPlan(options: ExecuteOptions): Promise<Codex
     };
   }
 
-  // No CLI-native auth — fall back to API key via SDK if available.
-  if (hasApiKey) {
+  // No CLI-native auth — prefer SDK when an API key is available.
+  // Using SDK with an API key avoids OAuth issues that can arise with the CLI.
+  // MCP servers still require CLI mode since the SDK doesn't support MCP.
+  if (hasApiKey && isSdkEligibleWithApiKey(options)) {
     return {
       mode: CODEX_EXECUTION_MODE_SDK,
+      cliPath,
+      openAiApiKey,
+    };
+  }
+
+  // MCP servers are requested with an API key but no CLI-native auth — use CLI mode
+  // with the API key passed as an environment variable.
+  if (hasApiKey && cliAvailable) {
+    return {
+      mode: CODEX_EXECUTION_MODE_CLI,
       cliPath,
       openAiApiKey,
     };
@@ -764,7 +783,7 @@ export class CodexProvider extends BaseProvider {
       }
       const searchEnabled =
         codexSettings.enableWebSearch || resolveSearchEnabled(resolvedAllowedTools, restrictTools);
-      await writeOutputSchemaFile(options.cwd, options.outputFormat);
+      const schemaPath = await writeOutputSchemaFile(options.cwd, options.outputFormat);
       const imageBlocks = codexSettings.enableImages ? extractImageBlocks(options.prompt) : [];
       const imagePaths = await writeImageFiles(options.cwd, imageBlocks);
       const approvalPolicy =
@@ -827,6 +846,9 @@ export class CodexProvider extends BaseProvider {
         ...configOverrideArgs,
         '-', // Read prompt from stdin to avoid shell escaping issues
       ];
+      if (schemaPath) {
+        args.push(CODEX_OUTPUT_SCHEMA_FLAG, schemaPath);
+      }
 
       const envOverrides = buildEnv();
       if (executionPlan.openAiApiKey && !envOverrides[OPENAI_API_KEY_ENV]) {
@@ -877,16 +899,16 @@ export class CodexProvider extends BaseProvider {
           } else if (errorLower.includes('authentication') || errorLower.includes('unauthorized')) {
             enhancedError = `${errorText}\n\nTip: Check that your OPENAI_API_KEY is set correctly or run 'codex login' to authenticate.`;
           } else if (
-            errorLower.includes('does not exist') ||
+            errorLower.includes('model does not exist') ||
+            errorLower.includes('requested model does not exist') ||
             errorLower.includes('do not have access') ||
             errorLower.includes('model_not_found') ||
             errorLower.includes('invalid_model')
           ) {
             enhancedError =
               `${errorText}\n\nTip: The model '${options.model}' may not be available on your OpenAI plan. ` +
-              `Available models include: ${CODEX_MODELS.map((m) => m.id).join(', ')}. ` +
-              `Some models require a ChatGPT Pro/Plus subscription—authenticate with 'codex login' instead of an API key. ` +
-              `For the current list of compatible models, visit https://platform.openai.com/docs/models.`;
+              `See https://platform.openai.com/docs/models for available models. ` +
+              `Some models require a ChatGPT Pro/Plus subscription—authenticate with 'codex login' instead of an API key.`;
           } else if (
             errorLower.includes('stream disconnected') ||
             errorLower.includes('stream ended') ||

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -55,11 +55,6 @@ function formatResetTime(unixTimestamp: number, isMilliseconds = false): string 
   return `Resets ${date.toLocaleDateString()} at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 }
 
-// Legacy alias for Codex
-function formatCodexResetTime(unixTimestamp: number): string {
-  return formatResetTime(unixTimestamp, false);
-}
-
 // Helper to format window duration for Codex
 function getCodexWindowLabel(durationMins: number): { title: string; subtitle: string } {
   if (durationMins < 60) {
@@ -95,6 +90,8 @@ export function UsagePopover() {
 
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'claude' | 'codex' | 'zai' | 'gemini'>('claude');
+  // Track whether the user has manually selected a tab so we don't override their choice
+  const userHasSelected = useRef(false);
 
   // Check authentication status
   const isClaudeAuthenticated = !!claudeAuthStatus?.authenticated;
@@ -190,8 +187,24 @@ export function UsagePopover() {
     return { code: ERROR_CODES.AUTH_ERROR, message };
   }, [geminiQueryError]);
 
-  // Determine which tab to show by default
+  // Determine which tab to show by default.
+  // Only apply the default when the popover opens (open transitions to true) and the user has
+  // not yet made a manual selection during this session.  This prevents auth-flag re-renders from
+  // overriding a tab the user explicitly clicked.
   useEffect(() => {
+    if (!open) {
+      // Reset the user-selection guard each time the popover closes so the next open always gets
+      // a fresh default.
+      userHasSelected.current = false;
+      return;
+    }
+
+    // The user already picked a tab – respect their choice.
+    if (userHasSelected.current) {
+      return;
+    }
+
+    // Pick the first available provider in priority order.
     if (isClaudeAuthenticated) {
       setActiveTab('claude');
     } else if (isCodexAuthenticated) {
@@ -201,7 +214,13 @@ export function UsagePopover() {
     } else if (isGeminiAuthenticated) {
       setActiveTab('gemini');
     }
-  }, [isClaudeAuthenticated, isCodexAuthenticated, isZaiAuthenticated, isGeminiAuthenticated]);
+  }, [
+    open,
+    isClaudeAuthenticated,
+    isCodexAuthenticated,
+    isZaiAuthenticated,
+    isGeminiAuthenticated,
+  ]);
 
   // Check if data is stale (older than 2 minutes)
   const isClaudeStale = useMemo(() => {
@@ -463,7 +482,10 @@ export function UsagePopover() {
       >
         <Tabs
           value={activeTab}
-          onValueChange={(v) => setActiveTab(v as 'claude' | 'codex' | 'zai' | 'gemini')}
+          onValueChange={(v) => {
+            userHasSelected.current = true;
+            setActiveTab(v as 'claude' | 'codex' | 'zai' | 'gemini');
+          }}
         >
           {/* Tabs Header */}
           {tabCount > 1 && (
@@ -684,7 +706,7 @@ export function UsagePopover() {
                           .subtitle
                       }
                       percentage={codexUsage.rateLimits.primary.usedPercent}
-                      resetText={formatCodexResetTime(codexUsage.rateLimits.primary.resetsAt)}
+                      resetText={formatResetTime(codexUsage.rateLimits.primary.resetsAt)}
                       isPrimary={true}
                       stale={isCodexStale}
                       pacePercentage={getExpectedCodexPacePercentage(
@@ -705,7 +727,7 @@ export function UsagePopover() {
                           .subtitle
                       }
                       percentage={codexUsage.rateLimits.secondary.usedPercent}
-                      resetText={formatCodexResetTime(codexUsage.rateLimits.secondary.resetsAt)}
+                      resetText={formatResetTime(codexUsage.rateLimits.secondary.resetsAt)}
                       stale={isCodexStale}
                       pacePercentage={getExpectedCodexPacePercentage(
                         codexUsage.rateLimits.secondary.resetsAt,

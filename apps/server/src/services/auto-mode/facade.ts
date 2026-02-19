@@ -22,7 +22,7 @@ import { getFeatureDir } from '@automaker/platform';
 import * as secureFs from '../../lib/secure-fs.js';
 import { validateWorkingDirectory } from '../../lib/sdk-options.js';
 import { getPromptCustomization, getProviderByModelId } from '../../lib/settings-helpers.js';
-import { execGitCommand } from '../../lib/git.js';
+import { execGitCommand } from '@automaker/git-utils';
 import { TypedEventBus } from '../typed-event-bus.js';
 import { ConcurrencyManager } from '../concurrency-manager.js';
 import { WorktreeResolver } from '../worktree-resolver.js';

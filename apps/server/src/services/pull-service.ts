@@ -17,7 +17,7 @@
 
 import { createLogger, getErrorMessage } from '@automaker/utils';
 import { getConflictFiles } from '@automaker/git-utils';
-import { execGitCommand, execGitCommandWithLockRetry } from '../lib/git.js';
+import { execGitCommand, execGitCommandWithLockRetry, getCurrentBranch } from '../lib/git.js';
 
 const logger = createLogger('PullService');
 
@@ -51,17 +51,6 @@ export interface PullResult {
 // ============================================================================
 // Helper Functions
 // ============================================================================
-
-/**
- * Get the current branch name for the worktree.
- *
- * @param worktreePath - Path to the git worktree
- * @returns The current branch name (returns 'HEAD' for detached HEAD state)
- */
-export async function getCurrentBranch(worktreePath: string): Promise<string> {
-  const branchOutput = await execGitCommand(['rev-parse', '--abbrev-ref', 'HEAD'], worktreePath);
-  return branchOutput.trim();
-}
 
 /**
  * Fetch the latest refs from a remote.
@@ -102,7 +91,7 @@ export async function getLocalChanges(
  *
  * @param worktreePath - Path to the git worktree
  * @param branchName - Current branch name (used in stash message)
- * @returns true if stash was created
+ * @returns Promise<void> — resolves on success, throws on failure
  */
 export async function stashChanges(worktreePath: string, branchName: string): Promise<void> {
   const stashMessage = `automaker-pull-stash: Pre-pull stash on ${branchName}`;

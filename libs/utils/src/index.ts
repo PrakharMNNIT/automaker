@@ -117,3 +117,6 @@ export {
   type ThrottleOptions,
   type DebouncedFunction,
 } from './debounce.js';
+
+// Git validation utilities
+export { isValidBranchName, MAX_BRANCH_NAME_LENGTH } from './git-validation.js';

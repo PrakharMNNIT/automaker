@@ -29,3 +29,8 @@ export {
   type BranchConflictData,
   type BranchConflictType,
 } from './branch-conflict-dialog';
+export {
+  StashConfirmDialog,
+  type UncommittedChangesInfo,
+  type StashConfirmAction,
+} from './stash-confirm-dialog';

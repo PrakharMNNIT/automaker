@@ -2291,11 +2291,18 @@ function createMockWorktreeAPI(): WorktreeAPI {
       };
     },
 
-    checkoutBranch: async (worktreePath: string, branchName: string, baseBranch?: string) => {
+    checkoutBranch: async (
+      worktreePath: string,
+      branchName: string,
+      baseBranch?: string,
+      stashChanges?: boolean,
+      _includeUntracked?: boolean
+    ) => {
       console.log('[Mock] Creating and checking out branch:', {
         worktreePath,
         branchName,
         baseBranch,
+        stashChanges,
       });
       return {
         success: true,
@@ -2303,6 +2310,22 @@ function createMockWorktreeAPI(): WorktreeAPI {
           previousBranch: 'main',
           newBranch: branchName,
           message: `Created and checked out branch '${branchName}'`,
+          hasConflicts: false,
+          stashedChanges: stashChanges ?? false,
+        },
+      };
+    },
+
+    checkChanges: async (worktreePath: string) => {
+      console.log('[Mock] Checking for uncommitted changes:', worktreePath);
+      return {
+        success: true,
+        result: {
+          hasChanges: false,
+          staged: [],
+          unstaged: [],
+          untracked: [],
+          totalFiles: 0,
         },
       };
     },

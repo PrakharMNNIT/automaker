@@ -447,35 +447,143 @@ export function useSwitchBranch(options?: {
 /**
  * Checkout a new branch
  *
+ * Supports automatic stash handling. When stashChanges is true in the mutation
+ * variables, local changes are stashed before creating the branch and reapplied
+ * after. If the reapply causes merge conflicts, the onConflict callback is called.
+ *
+ * If the checkout itself fails and the stash-pop used to restore changes also
+ * produces conflicts, the onStashPopConflict callback is called.
+ *
+ * @param options.onConflict - Callback when merge conflicts occur after stash reapply
+ * @param options.onStashPopConflict - Callback when checkout fails AND stash-pop restoration has conflicts
  * @returns Mutation for creating and checking out a new branch
  */
-export function useCheckoutBranch() {
+export function useCheckoutBranch(options?: {
+  onConflict?: (info: { worktreePath: string; branchName: string; previousBranch: string }) => void;
+  onStashPopConflict?: (info: {
+    worktreePath: string;
+    branchName: string;
+    stashPopConflictMessage: string;
+  }) => void;
+}) {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async ({
       worktreePath,
       branchName,
+      baseBranch,
+      stashChanges,
+      includeUntracked,
     }: {
       worktreePath: string;
       branchName: string;
+      baseBranch?: string;
+      stashChanges?: boolean;
+      includeUntracked?: boolean;
     }) => {
       const api = getElectronAPI();
       if (!api.worktree) throw new Error('Worktree API not available');
-      const result = await api.worktree.checkoutBranch(worktreePath, branchName);
+      const result = await api.worktree.checkoutBranch(
+        worktreePath,
+        branchName,
+        baseBranch,
+        stashChanges,
+        includeUntracked
+      );
       if (!result.success) {
+        // When the checkout failed and restoring the stash produced conflicts
+        if (result.stashPopConflicts) {
+          const conflictError = new Error(result.error || 'Failed to checkout branch');
+          (
+            conflictError as Error & {
+              stashPopConflicts: boolean;
+              stashPopConflictMessage: string;
+              worktreePath: string;
+              branchName: string;
+            }
+          ).stashPopConflicts = true;
+          (
+            conflictError as Error & {
+              stashPopConflicts: boolean;
+              stashPopConflictMessage: string;
+              worktreePath: string;
+              branchName: string;
+            }
+          ).stashPopConflictMessage =
+            result.stashPopConflictMessage ??
+            'Stash pop resulted in conflicts: please resolve conflicts before retrying.';
+          (
+            conflictError as Error & {
+              stashPopConflicts: boolean;
+              stashPopConflictMessage: string;
+              worktreePath: string;
+              branchName: string;
+            }
+          ).worktreePath = worktreePath;
+          (
+            conflictError as Error & {
+              stashPopConflicts: boolean;
+              stashPopConflictMessage: string;
+              worktreePath: string;
+              branchName: string;
+            }
+          ).branchName = branchName;
+          throw conflictError;
+        }
         throw new Error(result.error || 'Failed to checkout branch');
       }
       return result.result;
     },
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['worktrees'] });
-      toast.success('New branch created and checked out');
+
+      if (data?.hasConflicts) {
+        toast.warning('Branch created with conflicts', {
+          description: data.message,
+          duration: 8000,
+        });
+        options?.onConflict?.({
+          worktreePath: variables.worktreePath,
+          branchName: data.newBranch ?? variables.branchName,
+          previousBranch: data.previousBranch ?? '',
+        });
+      } else {
+        const desc = data?.stashedChanges ? 'Local changes were stashed and reapplied' : undefined;
+        toast.success('New branch created and checked out', { description: desc });
+      }
     },
     onError: (error: Error) => {
-      toast.error('Failed to checkout branch', {
-        description: error.message,
-      });
+      const enrichedError = error as Error & {
+        stashPopConflicts?: boolean;
+        stashPopConflictMessage?: string;
+        worktreePath?: string;
+        branchName?: string;
+      };
+
+      if (
+        enrichedError.stashPopConflicts &&
+        enrichedError.worktreePath &&
+        enrichedError.branchName
+      ) {
+        toast.error('Branch creation failed with stash conflicts', {
+          description:
+            enrichedError.stashPopConflictMessage ??
+            'Stash pop resulted in conflicts. Please resolve the conflicts in your working tree.',
+          duration: 10000,
+        });
+        options?.onStashPopConflict?.({
+          worktreePath: enrichedError.worktreePath,
+          branchName: enrichedError.branchName,
+          stashPopConflictMessage:
+            enrichedError.stashPopConflictMessage ??
+            'Stash pop resulted in conflicts. Please resolve the conflicts in your working tree.',
+        });
+      } else {
+        toast.error('Failed to checkout branch', {
+          description: error.message,
+        });
+      }
     },
   });
 }

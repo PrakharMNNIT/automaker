@@ -16,31 +16,7 @@ import type { Request, Response } from 'express';
 import type { EventEmitter } from '../../../lib/events.js';
 import { getErrorMessage, logError } from '../common.js';
 import { getBranchCommitLog } from '../../../services/branch-commit-log-service.js';
-
-/**
- * Validates a branchName value before it is forwarded to execGitCommand.
- *
- * Rejects values that:
- *  - Start with '-' (would be interpreted as a git flag/option)
- *  - Contain NUL bytes (\0)
- *  - Contain path-traversal sequences (..)
- *
- * Only allows characters from a safe whitelist:
- *  alphanumerics, dot (.), slash (/), underscore (_), dash (-), plus (+),
- *  at-sign (@), tilde (~), caret (^), and colon (:).
- *
- * Returns `true` when the value is safe to pass to execGitCommand.
- */
-function isValidBranchName(branchName: string): boolean {
-  // Must not start with '-' (git option injection)
-  if (branchName.startsWith('-')) return false;
-  // Must not contain NUL bytes
-  if (branchName.includes('\0')) return false;
-  // Must not contain path-traversal sequences
-  if (branchName.includes('..')) return false;
-  // Whitelist: alphanumerics and common ref characters
-  return /^[a-zA-Z0-9._/\-+@~^:]+$/.test(branchName);
-}
+import { isValidBranchName } from '@automaker/utils';
 
 export function createBranchCommitLogHandler(events: EventEmitter) {
   return async (req: Request, res: Response): Promise<void> => {
