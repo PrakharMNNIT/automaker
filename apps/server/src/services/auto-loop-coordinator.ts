@@ -4,6 +4,7 @@
 
 import type { Feature } from '@automaker/types';
 import { createLogger, classifyError } from '@automaker/utils';
+import { areDependenciesSatisfied } from '@automaker/dependency-resolver';
 import type { TypedEventBus } from './typed-event-bus.js';
 import type { ConcurrencyManager } from './concurrency-manager.js';
 import type { SettingsService } from './settings-service.js';
@@ -64,6 +65,7 @@ export type ClearExecutionStateFn = (
 ) => Promise<void>;
 export type ResetStuckFeaturesFn = (projectPath: string) => Promise<void>;
 export type IsFeatureFinishedFn = (feature: Feature) => boolean;
+export type LoadAllFeaturesFn = (projectPath: string) => Promise<Feature[]>;
 
 export class AutoLoopCoordinator {
   private autoLoopsByProject = new Map<string, ProjectAutoLoopState>();
@@ -78,7 +80,8 @@ export class AutoLoopCoordinator {
     private clearExecutionStateFn: ClearExecutionStateFn,
     private resetStuckFeaturesFn: ResetStuckFeaturesFn,
     private isFeatureFinishedFn: IsFeatureFinishedFn,
-    private isFeatureRunningFn: (featureId: string) => boolean
+    private isFeatureRunningFn: (featureId: string) => boolean,
+    private loadAllFeaturesFn?: LoadAllFeaturesFn
   ) {}
 
   /**
@@ -158,10 +161,7 @@ export class AutoLoopCoordinator {
     const projectState = this.autoLoopsByProject.get(worktreeKey);
     if (!projectState) return;
     const { projectPath, branchName } = projectState.config;
-    let iterationCount = 0;
-
     while (projectState.isRunning && !projectState.abortController.signal.aborted) {
-      iterationCount++;
       try {
         const runningCount = await this.getRunningCountForWorktree(projectPath, branchName);
         if (runningCount >= projectState.config.maxConcurrency) {
@@ -181,9 +181,34 @@ export class AutoLoopCoordinator {
           await this.sleep(10000, projectState.abortController.signal);
           continue;
         }
-        const nextFeature = pendingFeatures.find(
-          (f) => !this.isFeatureRunningFn(f.id) && !this.isFeatureFinishedFn(f)
+
+        // Load all features for dependency checking (if callback provided)
+        const allFeatures = this.loadAllFeaturesFn
+          ? await this.loadAllFeaturesFn(projectPath)
+          : undefined;
+
+        // Filter to eligible features: not running, not finished, and dependencies satisfied.
+        // When loadAllFeaturesFn is not provided, allFeatures is undefined and we bypass
+        // dependency checks (returning true) to avoid false negatives caused by completed
+        // features being absent from pendingFeatures.
+        const eligibleFeatures = pendingFeatures.filter(
+          (f) =>
+            !this.isFeatureRunningFn(f.id) &&
+            !this.isFeatureFinishedFn(f) &&
+            (this.loadAllFeaturesFn ? areDependenciesSatisfied(f, allFeatures!) : true)
         );
+
+        // Sort eligible features by priority (lower number = higher priority, default 2)
+        eligibleFeatures.sort((a, b) => (a.priority ?? 2) - (b.priority ?? 2));
+
+        const nextFeature = eligibleFeatures[0] ?? null;
+
+        if (nextFeature) {
+          logger.info(
+            `Auto-loop selected feature "${nextFeature.title || nextFeature.id}" ` +
+              `(priority=${nextFeature.priority ?? 2}) from ${eligibleFeatures.length} eligible features`
+          );
+        }
         if (nextFeature) {
           projectState.hasEmittedIdleEvent = false;
           this.executeFeatureFn(
@@ -390,6 +415,10 @@ export class AutoLoopCoordinator {
       const projectId = settings.projects?.find((p) => p.path === projectPath)?.id;
       const autoModeByWorktree = settings.autoModeByWorktree;
       if (projectId && autoModeByWorktree && typeof autoModeByWorktree === 'object') {
+        // Normalize both null and 'main' to '__main__' to match the same
+        // canonicalization used by getWorktreeAutoLoopKey, ensuring that
+        // lookups for the primary branch always use the '__main__' sentinel
+        // regardless of whether the caller passed null or the string 'main'.
         const normalizedBranch =
           branchName === null || branchName === 'main' ? '__main__' : branchName;
         const worktreeId = `${projectId}::${normalizedBranch}`;

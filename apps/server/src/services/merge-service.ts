@@ -4,8 +4,9 @@
  * Extracted from worktree merge route to allow internal service calls.
  */
 
-import { createLogger } from '@automaker/utils';
-import { spawnProcess } from '@automaker/platform';
+import { createLogger, isValidBranchName } from '@automaker/utils';
+import { type EventEmitter } from '../lib/events.js';
+import { execGitCommand } from '@automaker/git-utils';
 const logger = createLogger('MergeService');
 
 export interface MergeOptions {
@@ -18,37 +19,13 @@ export interface MergeServiceResult {
   success: boolean;
   error?: string;
   hasConflicts?: boolean;
+  conflictFiles?: string[];
   mergedBranch?: string;
   targetBranch?: string;
   deleted?: {
     worktreeDeleted: boolean;
     branchDeleted: boolean;
   };
-}
-
-/**
- * Execute git command with array arguments to prevent command injection.
- */
-async function execGitCommand(args: string[], cwd: string): Promise<string> {
-  const result = await spawnProcess({
-    command: 'git',
-    args,
-    cwd,
-  });
-
-  if (result.exitCode === 0) {
-    return result.stdout;
-  } else {
-    const errorMessage = result.stderr || `Git command failed with code ${result.exitCode}`;
-    throw new Error(errorMessage);
-  }
-}
-
-/**
- * Validate branch name to prevent command injection.
- */
-function isValidBranchName(name: string): boolean {
-  return /^[a-zA-Z0-9._\-/]+$/.test(name) && name.length < 250;
 }
 
 /**
@@ -65,7 +42,8 @@ export async function performMerge(
   branchName: string,
   worktreePath: string,
   targetBranch: string = 'main',
-  options?: MergeOptions
+  options?: MergeOptions,
+  emitter?: EventEmitter
 ): Promise<MergeServiceResult> {
   if (!projectPath || !branchName || !worktreePath) {
     return {
@@ -110,6 +88,9 @@ export async function performMerge(
     };
   }
 
+  // Emit merge:start after validating inputs
+  emitter?.emit('merge:start', { branchName, targetBranch: mergeTo, worktreePath });
+
   // Merge the feature branch into the target branch (using safe array-based commands)
   const mergeMessage = options?.message || `Merge ${branchName} into ${mergeTo}`;
   const mergeArgs = options?.squash
@@ -117,20 +98,106 @@ export async function performMerge(
     : ['merge', branchName, '-m', mergeMessage];
 
   try {
-    await execGitCommand(mergeArgs, projectPath);
+    // Set LC_ALL=C so git always emits English output regardless of the system
+    // locale, making text-based conflict detection reliable.
+    await execGitCommand(mergeArgs, projectPath, { LC_ALL: 'C' });
   } catch (mergeError: unknown) {
-    // Check if this is a merge conflict
+    // Check if this is a merge conflict.  We use a multi-layer strategy so
+    // that detection is reliable even when locale settings vary or git's text
+    // output changes across versions:
+    //
+    //  1. Primary (text-based): scan the error output for well-known English
+    //     conflict markers.  Because we pass LC_ALL=C above these strings are
+    //     always in English, but we keep the check as one layer among several.
+    //
+    //  2. Unmerged-path check: run `git diff --name-only --diff-filter=U`
+    //     (locale-stable) and treat any non-empty output as a conflict
+    //     indicator, capturing the file list at the same time.
+    //
+    //  3. Fallback status check: run `git status --porcelain` and look for
+    //     lines whose first two characters indicate an unmerged state
+    //     (UU, AA, DD, AU, UA, DU, UD).
+    //
+    // hasConflicts is true when ANY of the three layers returns positive.
     const err = mergeError as { stdout?: string; stderr?: string; message?: string };
     const output = `${err.stdout || ''} ${err.stderr || ''} ${err.message || ''}`;
-    const hasConflicts = output.includes('CONFLICT') || output.includes('Automatic merge failed');
+
+    // Layer 1 – text matching (locale-safe because we set LC_ALL=C above).
+    const textIndicatesConflict =
+      output.includes('CONFLICT') || output.includes('Automatic merge failed');
+
+    // Layers 2 & 3 – repository state inspection (locale-independent).
+    // Layer 2: get conflicted files via diff (also locale-stable output).
+    let conflictFiles: string[] | undefined;
+    let diffIndicatesConflict = false;
+    try {
+      const diffOutput = await execGitCommand(
+        ['diff', '--name-only', '--diff-filter=U'],
+        projectPath,
+        { LC_ALL: 'C' }
+      );
+      const files = diffOutput
+        .trim()
+        .split('\n')
+        .filter((f) => f.trim().length > 0);
+      if (files.length > 0) {
+        diffIndicatesConflict = true;
+        conflictFiles = files;
+      }
+    } catch {
+      // If we can't get the file list, leave conflictFiles undefined so callers
+      // can distinguish "no conflicts" (empty array) from "unknown due to diff failure" (undefined)
+    }
+
+    // Layer 3: check for unmerged paths via machine-readable git status.
+    let hasUnmergedPaths = false;
+    try {
+      const statusOutput = await execGitCommand(['status', '--porcelain'], projectPath, {
+        LC_ALL: 'C',
+      });
+      // Unmerged status codes occupy the first two characters of each line.
+      // Standard unmerged codes: UU, AA, DD, AU, UA, DU, UD.
+      const unmergedLines = statusOutput
+        .split('\n')
+        .filter((line) => /^(UU|AA|DD|AU|UA|DU|UD)/.test(line));
+      hasUnmergedPaths = unmergedLines.length > 0;
+
+      // If Layer 2 did not populate conflictFiles (e.g. diff failed or returned
+      // nothing) but Layer 3 does detect unmerged paths, parse the status lines
+      // to extract filenames and assign them to conflictFiles so callers always
+      // receive an accurate file list when conflicts are present.
+      if (hasUnmergedPaths && conflictFiles === undefined) {
+        const parsedFiles = unmergedLines
+          .map((line) => line.slice(2).trim())
+          .filter((f) => f.length > 0);
+        // Deduplicate (e.g. rename entries can appear twice)
+        conflictFiles = [...new Set(parsedFiles)];
+      }
+    } catch {
+      // git status failing is itself a sign something is wrong; leave
+      // hasUnmergedPaths as false and rely on the other layers.
+    }
+
+    const hasConflicts = textIndicatesConflict || diffIndicatesConflict || hasUnmergedPaths;
 
     if (hasConflicts) {
+      // Emit merge:conflict event with conflict details
+      emitter?.emit('merge:conflict', { branchName, targetBranch: mergeTo, conflictFiles });
+
       return {
         success: false,
         error: `Merge CONFLICT: Automatic merge of "${branchName}" into "${mergeTo}" failed. Please resolve conflicts manually.`,
         hasConflicts: true,
+        conflictFiles,
       };
     }
+
+    // Emit merge:error for non-conflict errors before re-throwing
+    emitter?.emit('merge:error', {
+      branchName,
+      targetBranch: mergeTo,
+      error: err.message || String(mergeError),
+    });
 
     // Re-throw non-conflict errors
     throw mergeError;
@@ -139,7 +206,18 @@ export async function performMerge(
   // If squash merge, need to commit (using safe array-based command)
   if (options?.squash) {
     const squashMessage = options?.message || `Merge ${branchName} (squash)`;
-    await execGitCommand(['commit', '-m', squashMessage], projectPath);
+    try {
+      await execGitCommand(['commit', '-m', squashMessage], projectPath);
+    } catch (commitError: unknown) {
+      const err = commitError as { message?: string };
+      // Emit merge:error so subscribers always receive either merge:success or merge:error
+      emitter?.emit('merge:error', {
+        branchName,
+        targetBranch: mergeTo,
+        error: err.message || String(commitError),
+      });
+      throw commitError;
+    }
   }
 
   // Optionally delete the worktree and branch after merging
@@ -163,18 +241,21 @@ export async function performMerge(
 
     // Delete the branch (but not main/master)
     if (branchName !== 'main' && branchName !== 'master') {
-      if (!isValidBranchName(branchName)) {
-        logger.warn(`Invalid branch name detected, skipping deletion: ${branchName}`);
-      } else {
-        try {
-          await execGitCommand(['branch', '-D', branchName], projectPath);
-          branchDeleted = true;
-        } catch {
-          logger.warn(`Failed to delete branch: ${branchName}`);
-        }
+      try {
+        await execGitCommand(['branch', '-D', branchName], projectPath);
+        branchDeleted = true;
+      } catch {
+        logger.warn(`Failed to delete branch: ${branchName}`);
       }
     }
   }
+
+  // Emit merge:success with merged branch, target branch, and deletion info
+  emitter?.emit('merge:success', {
+    mergedBranch: branchName,
+    targetBranch: mergeTo,
+    deleted: options?.deleteWorktreeAndBranch ? { worktreeDeleted, branchDeleted } : undefined,
+  });
 
   return {
     success: true,

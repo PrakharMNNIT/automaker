@@ -3,6 +3,9 @@
  * Git operations utilities for AutoMaker
  */
 
+// Export command execution utilities
+export { execGitCommand } from './exec.js';
+
 // Export types and constants
 export { BINARY_EXTENSIONS, GIT_STATUS_MAP, type FileStatus } from './types.js';
 
@@ -17,3 +20,9 @@ export {
   generateDiffsForNonGitDirectory,
   getGitRepositoryDiffs,
 } from './diff.js';
+
+// Export conflict utilities
+export { getConflictFiles } from './conflict.js';
+
+// Export branch utilities
+export { getCurrentBranch } from './branch.js';

@@ -6,6 +6,7 @@ import { getHttpApiClient } from '@/lib/http-api-client';
 import { createLogger } from '@automaker/utils/logger';
 // Note: setItem/getItem moved to ./utils/theme-utils.ts
 import { UI_SANS_FONT_OPTIONS, UI_MONO_FONT_OPTIONS } from '@/config/ui-font-options';
+import { loadFont } from '@/styles/font-imports';
 import type {
   FeatureImagePath,
   FeatureTextFilePath,
@@ -79,6 +80,14 @@ import {
   type CodexRateLimitWindow,
   type CodexUsage,
   type CodexUsageResponse,
+  type ZaiPlanType,
+  type ZaiQuotaLimit,
+  type ZaiUsage,
+  type ZaiUsageResponse,
+  type GeminiQuotaBucket,
+  type GeminiTierQuota,
+  type GeminiUsage,
+  type GeminiUsageResponse,
 } from './types';
 
 // Import utility functions from modular utils files
@@ -158,6 +167,14 @@ export type {
   CodexRateLimitWindow,
   CodexUsage,
   CodexUsageResponse,
+  ZaiPlanType,
+  ZaiQuotaLimit,
+  ZaiUsage,
+  ZaiUsageResponse,
+  GeminiQuotaBucket,
+  GeminiTierQuota,
+  GeminiUsage,
+  GeminiUsageResponse,
 };
 
 // Re-export values from ./types for backward compatibility
@@ -187,7 +204,7 @@ export { defaultBackgroundSettings, defaultTerminalState, MAX_INIT_OUTPUT_LINES 
 // - Terminal types (./types/terminal-types.ts)
 // - ClaudeModel, Feature, FileTreeNode, ProjectAnalysis (./types/project-types.ts)
 // - InitScriptState, AutoModeActivity, AppState, AppActions (./types/state-types.ts)
-// - Claude/Codex usage types (./types/usage-types.ts)
+// - Claude/Codex/Zai/Gemini usage types (./types/usage-types.ts)
 // The following utility functions have been moved to ./utils/:
 // - Theme utilities: THEME_STORAGE_KEY, getStoredTheme, getStoredFontSans, getStoredFontMono, etc. (./utils/theme-utils.ts)
 // - Shortcut utilities: parseShortcut, formatShortcut, DEFAULT_KEYBOARD_SHORTCUTS (./utils/shortcut-utils.ts)
@@ -196,6 +213,9 @@ export { defaultBackgroundSettings, defaultTerminalState, MAX_INIT_OUTPUT_LINES 
 // - MAX_INIT_OUTPUT_LINES (./defaults/constants.ts)
 // - defaultBackgroundSettings (./defaults/background-settings.ts)
 // - defaultTerminalState (./defaults/terminal-defaults.ts)
+
+// Type definitions are imported from ./types/state-types.ts
+// AppActions interface is defined in ./types/state-types.ts
 
 const initialState: AppState = {
   projects: [],
@@ -219,6 +239,7 @@ const initialState: AppState = {
     anthropic: '',
     google: '',
     openai: '',
+    zai: '',
   },
   chatSessions: [],
   currentChatSession: null,
@@ -255,6 +276,8 @@ const initialState: AppState = {
   codexApprovalPolicy: 'on-request',
   codexEnableWebSearch: false,
   codexEnableImages: false,
+  codexAdditionalDirs: [],
+  codexThreadId: undefined,
   enabledOpencodeModels: getAllOpencodeModelIds(),
   opencodeDefaultModel: DEFAULT_OPENCODE_MODEL,
   dynamicOpencodeModels: [],
@@ -299,6 +322,10 @@ const initialState: AppState = {
   claudeUsageLastUpdated: null,
   codexUsage: null,
   codexUsageLastUpdated: null,
+  zaiUsage: null,
+  zaiUsageLastUpdated: null,
+  geminiUsage: null,
+  geminiUsageLastUpdated: null,
   codexModels: [],
   codexModelsLoading: false,
   codexModelsError: null,
@@ -310,6 +337,7 @@ const initialState: AppState = {
   defaultDeleteBranchByProject: {},
   autoDismissInitScriptIndicatorByProject: {},
   useWorktreesByProject: {},
+  worktreeCopyFilesByProject: {},
   worktreePanelCollapsed: false,
   lastProjectDir: '',
   recentFolders: [],
@@ -334,10 +362,15 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     }
   },
 
-  removeProject: (projectId) =>
+  removeProject: (projectId: string) => {
     set((state) => ({
       projects: state.projects.filter((p) => p.id !== projectId),
-    })),
+      currentProject: state.currentProject?.id === projectId ? null : state.currentProject,
+    }));
+
+    // Persist to storage
+    saveProjects(get().projects);
+  },
 
   moveProjectToTrash: (projectId: string) => {
     const project = get().projects.find((p) => p.id === projectId);
@@ -639,12 +672,14 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
   },
   setPreviewTheme: (theme) => set({ previewTheme: theme }),
 
-  // Font actions
+  // Font actions - triggers lazy font loading for on-demand fonts
   setFontSans: (fontFamily) => {
+    if (fontFamily) loadFont(fontFamily);
     set({ fontFamilySans: fontFamily });
     saveFontSansToStorage(fontFamily);
   },
   setFontMono: (fontFamily) => {
+    if (fontFamily) loadFont(fontFamily);
     set({ fontFamilyMono: fontFamily });
     saveFontMonoToStorage(fontFamily);
   },
@@ -2367,6 +2402,16 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     return projectOverride !== undefined ? projectOverride : get().useWorktrees;
   },
 
+  // Worktree Copy Files actions
+  setWorktreeCopyFiles: (projectPath, files) =>
+    set((state) => ({
+      worktreeCopyFilesByProject: {
+        ...state.worktreeCopyFilesByProject,
+        [projectPath]: files,
+      },
+    })),
+  getWorktreeCopyFiles: (projectPath) => get().worktreeCopyFilesByProject[projectPath] ?? [],
+
   // UI State actions
   setWorktreePanelCollapsed: (collapsed) => set({ worktreePanelCollapsed: collapsed }),
   setLastProjectDir: (dir) => set({ lastProjectDir: dir }),
@@ -2384,6 +2429,16 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
 
   // Codex Usage Tracking actions
   setCodexUsage: (usage) => set({ codexUsage: usage, codexUsageLastUpdated: Date.now() }),
+
+  // z.ai Usage Tracking actions
+  setZaiUsage: (usage) => set({ zaiUsage: usage, zaiUsageLastUpdated: usage ? Date.now() : null }),
+
+  // Gemini Usage Tracking actions
+  setGeminiUsage: (usage, lastUpdated) =>
+    set({
+      geminiUsage: usage,
+      geminiUsageLastUpdated: lastUpdated ?? (usage ? Date.now() : null),
+    }),
 
   // Codex Models actions
   fetchCodexModels: async (forceRefresh = false) => {

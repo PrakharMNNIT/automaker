@@ -86,6 +86,7 @@ export function useAutoMode(worktree?: WorktreeInfo) {
     getMaxConcurrencyForWorktree,
     setMaxConcurrencyForWorktree,
     isPrimaryWorktreeBranch,
+    globalMaxConcurrency,
   } = useAppStore(
     useShallow((state) => ({
       autoModeByWorktree: state.autoModeByWorktree,
@@ -100,6 +101,7 @@ export function useAutoMode(worktree?: WorktreeInfo) {
       getMaxConcurrencyForWorktree: state.getMaxConcurrencyForWorktree,
       setMaxConcurrencyForWorktree: state.setMaxConcurrencyForWorktree,
       isPrimaryWorktreeBranch: state.isPrimaryWorktreeBranch,
+      globalMaxConcurrency: state.maxConcurrency,
     }))
   );
 
@@ -143,7 +145,14 @@ export function useAutoMode(worktree?: WorktreeInfo) {
 
   const isAutoModeRunning = worktreeAutoModeState.isRunning;
   const runningAutoTasks = worktreeAutoModeState.runningTasks;
-  const maxConcurrency = worktreeAutoModeState.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
+  // Use the subscribed worktreeAutoModeState.maxConcurrency (from the reactive
+  // autoModeByWorktree store slice) so canStartNewTask stays reactive when
+  // refreshStatus updates worktree state or when the global setting changes.
+  // Falls back to the subscribed globalMaxConcurrency (also reactive) when no
+  // per-worktree value is set, and to DEFAULT_MAX_CONCURRENCY when no project.
+  const maxConcurrency = projectId
+    ? (worktreeAutoModeState.maxConcurrency ?? globalMaxConcurrency)
+    : DEFAULT_MAX_CONCURRENCY;
 
   // Check if we can start a new task based on concurrency limit
   const canStartNewTask = runningAutoTasks.length < maxConcurrency;
@@ -172,7 +181,10 @@ export function useAutoMode(worktree?: WorktreeInfo) {
           (backendIsRunning &&
             Array.isArray(backendRunningFeatures) &&
             backendRunningFeatures.length > 0 &&
-            !arraysEqual(backendRunningFeatures, runningAutoTasks));
+            !arraysEqual(backendRunningFeatures, runningAutoTasks)) ||
+          // Also sync when UI has stale running tasks but backend has none
+          // (handles server restart where features were reconciled to backlog/ready)
+          (!backendIsRunning && runningAutoTasks.length > 0 && backendRunningFeatures.length === 0);
 
         if (needsSync) {
           const worktreeDesc = branchName ? `worktree ${branchName}` : 'main worktree';

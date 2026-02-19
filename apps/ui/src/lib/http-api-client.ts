@@ -41,7 +41,12 @@ import type {
   Notification,
 } from '@automaker/types';
 import type { Message, SessionListItem } from '@/types/electron';
-import type { ClaudeUsageResponse, CodexUsageResponse } from '@/store/app-store';
+import type {
+  ClaudeUsageResponse,
+  CodexUsageResponse,
+  GeminiUsage,
+  ZaiUsageResponse,
+} from '@/store/app-store';
 import type { WorktreeAPI, GitAPI, ModelDefinition, ProviderStatus } from '@/types/electron';
 import type { ModelId, ThinkingLevel, ReasoningEffort, Feature } from '@automaker/types';
 import { getGlobalFileBrowser } from '@/contexts/file-browser-context';
@@ -687,6 +692,10 @@ export class HttpApiClient implements ElectronAPI {
   private eventCallbacks: Map<EventType, Set<EventCallback>> = new Map();
   private reconnectTimer: NodeJS.Timeout | null = null;
   private isConnecting = false;
+  /** Consecutive reconnect failure count for exponential backoff */
+  private reconnectAttempts = 0;
+  /** Visibility change handler reference for cleanup */
+  private visibilityHandler: (() => void) | null = null;
 
   constructor() {
     this.serverUrl = getServerUrl();
@@ -703,6 +712,27 @@ export class HttpApiClient implements ElectronAPI {
           // Still attempt WebSocket connection - it may work with cookie auth
           this.connectWebSocket();
         });
+    }
+
+    // OPTIMIZATION: Reconnect WebSocket immediately when tab becomes visible
+    // This eliminates the reconnection delay after tab discard/background
+    this.visibilityHandler = () => {
+      if (document.visibilityState === 'visible') {
+        // If WebSocket is disconnected, reconnect immediately
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+          logger.info('Tab became visible - attempting immediate WebSocket reconnect');
+          // Clear any pending reconnect timer
+          if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+          }
+          this.reconnectAttempts = 0; // Reset backoff on visibility change
+          this.connectWebSocket();
+        }
+      }
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', this.visibilityHandler);
     }
   }
 
@@ -827,6 +857,7 @@ export class HttpApiClient implements ElectronAPI {
       this.ws.onopen = () => {
         logger.info('WebSocket connected');
         this.isConnecting = false;
+        this.reconnectAttempts = 0; // Reset backoff on successful connection
         if (this.reconnectTimer) {
           clearTimeout(this.reconnectTimer);
           this.reconnectTimer = null;
@@ -858,12 +889,27 @@ export class HttpApiClient implements ElectronAPI {
         logger.info('WebSocket disconnected');
         this.isConnecting = false;
         this.ws = null;
-        // Attempt to reconnect after 5 seconds
+
+        // OPTIMIZATION: Exponential backoff instead of fixed 5-second delay
+        // First attempt: immediate (0ms), then 500ms → 1s → 2s → 5s max
         if (!this.reconnectTimer) {
-          this.reconnectTimer = setTimeout(() => {
-            this.reconnectTimer = null;
+          const backoffDelays = [0, 500, 1000, 2000, 5000];
+          const delayMs =
+            backoffDelays[Math.min(this.reconnectAttempts, backoffDelays.length - 1)] ?? 5000;
+          this.reconnectAttempts++;
+
+          if (delayMs === 0) {
+            // Immediate reconnect on first attempt
             this.connectWebSocket();
-          }, 5000);
+          } else {
+            logger.info(
+              `WebSocket reconnecting in ${delayMs}ms (attempt ${this.reconnectAttempts})`
+            );
+            this.reconnectTimer = setTimeout(() => {
+              this.reconnectTimer = null;
+              this.connectWebSocket();
+            }, delayMs);
+          }
         }
       };
 
@@ -1737,6 +1783,39 @@ export class HttpApiClient implements ElectronAPI {
     },
   };
 
+  // z.ai API
+  zai = {
+    getStatus: (): Promise<{
+      success: boolean;
+      available: boolean;
+      message?: string;
+      hasApiKey?: boolean;
+      hasEnvApiKey?: boolean;
+      error?: string;
+    }> => this.get('/api/zai/status'),
+
+    getUsage: (): Promise<ZaiUsageResponse> => this.get('/api/zai/usage'),
+
+    configure: (
+      apiToken?: string,
+      apiHost?: string
+    ): Promise<{
+      success: boolean;
+      message?: string;
+      isAvailable?: boolean;
+      error?: string;
+    }> => this.post('/api/zai/configure', { apiToken, apiHost }),
+
+    verify: (
+      apiKey: string
+    ): Promise<{
+      success: boolean;
+      authenticated: boolean;
+      message?: string;
+      error?: string;
+    }> => this.post('/api/zai/verify', { apiKey }),
+  };
+
   // Features API
   features: FeaturesAPI & {
     bulkUpdate: (
@@ -2038,10 +2117,12 @@ export class HttpApiClient implements ElectronAPI {
         worktreePath,
         deleteBranch,
       }),
-    commit: (worktreePath: string, message: string) =>
-      this.post('/api/worktree/commit', { worktreePath, message }),
+    commit: (worktreePath: string, message: string, files?: string[]) =>
+      this.post('/api/worktree/commit', { worktreePath, message, files }),
     generateCommitMessage: (worktreePath: string) =>
       this.post('/api/worktree/generate-commit-message', { worktreePath }),
+    generatePRDescription: (worktreePath: string, baseBranch?: string) =>
+      this.post('/api/worktree/generate-pr-description', { worktreePath, baseBranch }),
     push: (worktreePath: string, force?: boolean, remote?: string) =>
       this.post('/api/worktree/push', { worktreePath, force, remote }),
     createPR: (worktreePath: string, options?: CreatePROptions) =>
@@ -2054,9 +2135,26 @@ export class HttpApiClient implements ElectronAPI {
         featureId,
         filePath,
       }),
-    pull: (worktreePath: string) => this.post('/api/worktree/pull', { worktreePath }),
-    checkoutBranch: (worktreePath: string, branchName: string) =>
-      this.post('/api/worktree/checkout-branch', { worktreePath, branchName }),
+    stageFiles: (worktreePath: string, files: string[], operation: 'stage' | 'unstage') =>
+      this.post('/api/worktree/stage-files', { worktreePath, files, operation }),
+    pull: (worktreePath: string, remote?: string, stashIfNeeded?: boolean) =>
+      this.post('/api/worktree/pull', { worktreePath, remote, stashIfNeeded }),
+    checkoutBranch: (
+      worktreePath: string,
+      branchName: string,
+      baseBranch?: string,
+      stashChanges?: boolean,
+      includeUntracked?: boolean
+    ) =>
+      this.post('/api/worktree/checkout-branch', {
+        worktreePath,
+        branchName,
+        baseBranch,
+        stashChanges,
+        includeUntracked,
+      }),
+    checkChanges: (worktreePath: string) =>
+      this.post('/api/worktree/check-changes', { worktreePath }),
     listBranches: (worktreePath: string, includeRemote?: boolean) =>
       this.post('/api/worktree/list-branches', { worktreePath, includeRemote }),
     switchBranch: (worktreePath: string, branchName: string) =>
@@ -2109,8 +2207,8 @@ export class HttpApiClient implements ElectronAPI {
       this.httpDelete('/api/worktree/init-script', { projectPath }),
     runInitScript: (projectPath: string, worktreePath: string, branch: string) =>
       this.post('/api/worktree/run-init-script', { projectPath, worktreePath, branch }),
-    discardChanges: (worktreePath: string) =>
-      this.post('/api/worktree/discard-changes', { worktreePath }),
+    discardChanges: (worktreePath: string, files?: string[]) =>
+      this.post('/api/worktree/discard-changes', { worktreePath, files }),
     onInitScriptEvent: (
       callback: (event: {
         type: 'worktree:init-started' | 'worktree:init-output' | 'worktree:init-completed';
@@ -2137,6 +2235,25 @@ export class HttpApiClient implements ElectronAPI {
     startTests: (worktreePath: string, options?: { projectPath?: string; testFile?: string }) =>
       this.post('/api/worktree/start-tests', { worktreePath, ...options }),
     stopTests: (sessionId: string) => this.post('/api/worktree/stop-tests', { sessionId }),
+    getCommitLog: (worktreePath: string, limit?: number) =>
+      this.post('/api/worktree/commit-log', { worktreePath, limit }),
+    stashPush: (worktreePath: string, message?: string, files?: string[]) =>
+      this.post('/api/worktree/stash-push', { worktreePath, message, files }),
+    stashList: (worktreePath: string) => this.post('/api/worktree/stash-list', { worktreePath }),
+    stashApply: (worktreePath: string, stashIndex: number, pop?: boolean) =>
+      this.post('/api/worktree/stash-apply', { worktreePath, stashIndex, pop }),
+    stashDrop: (worktreePath: string, stashIndex: number) =>
+      this.post('/api/worktree/stash-drop', { worktreePath, stashIndex }),
+    cherryPick: (worktreePath: string, commitHashes: string[], options?: { noCommit?: boolean }) =>
+      this.post('/api/worktree/cherry-pick', { worktreePath, commitHashes, options }),
+    rebase: (worktreePath: string, ontoBranch: string) =>
+      this.post('/api/worktree/rebase', { worktreePath, ontoBranch }),
+    abortOperation: (worktreePath: string) =>
+      this.post('/api/worktree/abort-operation', { worktreePath }),
+    continueOperation: (worktreePath: string) =>
+      this.post('/api/worktree/continue-operation', { worktreePath }),
+    getBranchCommitLog: (worktreePath: string, branchName?: string, limit?: number) =>
+      this.post('/api/worktree/branch-commit-log', { worktreePath, branchName, limit }),
     getTestLogs: (worktreePath?: string, sessionId?: string): Promise<TestLogsResponse> => {
       const params = new URLSearchParams();
       if (worktreePath) params.append('worktreePath', worktreePath);
@@ -2166,6 +2283,8 @@ export class HttpApiClient implements ElectronAPI {
     getDiffs: (projectPath: string) => this.post('/api/git/diffs', { projectPath }),
     getFileDiff: (projectPath: string, filePath: string) =>
       this.post('/api/git/file-diff', { projectPath, filePath }),
+    stageFiles: (projectPath: string, files: string[], operation: 'stage' | 'unstage') =>
+      this.post('/api/git/stage-files', { projectPath, files, operation }),
   };
 
   // Spec Regeneration API
@@ -2503,6 +2622,7 @@ export class HttpApiClient implements ElectronAPI {
         showInitScriptIndicator?: boolean;
         defaultDeleteBranchWithWorktree?: boolean;
         autoDismissInitScriptIndicator?: boolean;
+        worktreeCopyFiles?: string[];
         lastSelectedSessionId?: string;
         testCommand?: string;
       };
@@ -2625,6 +2745,11 @@ export class HttpApiClient implements ElectronAPI {
       const url = `/api/codex/models${refresh ? '?refresh=true' : ''}`;
       return this.get(url);
     },
+  };
+
+  // Gemini API
+  gemini = {
+    getUsage: (): Promise<GeminiUsage> => this.get('/api/gemini/usage'),
   };
 
   // Context API

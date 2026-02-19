@@ -11,7 +11,7 @@ import {
 import type { ReasoningEffort } from '@automaker/types';
 import { FeatureImagePath as DescriptionImagePath } from '@/components/ui/description-image-dropzone';
 import { getElectronAPI } from '@/lib/electron';
-import { isConnectionError, handleServerOffline } from '@/lib/http-api-client';
+import { isConnectionError, handleServerOffline, getHttpApiClient } from '@/lib/http-api-client';
 import { toast } from 'sonner';
 import { useAutoMode } from '@/hooks/use-auto-mode';
 import { useVerifyFeature, useResumeFeature } from '@/hooks/mutations';
@@ -20,6 +20,8 @@ import { getBlockingDependencies } from '@automaker/dependency-resolver';
 import { createLogger } from '@automaker/utils/logger';
 
 const logger = createLogger('BoardActions');
+
+const MAX_DUPLICATES = 50;
 
 interface UseBoardActionsProps {
   currentProject: { path: string; id: string } | null;
@@ -93,6 +95,7 @@ export function useBoardActions({
     isPrimaryWorktreeBranch,
     getPrimaryWorktreeBranch,
     getAutoModeState,
+    getMaxConcurrencyForWorktree,
   } = useAppStore();
   const autoMode = useAutoMode();
 
@@ -279,6 +282,8 @@ export function useBoardActions({
             });
         }
       }
+
+      return createdFeature;
     },
     [
       addFeature,
@@ -566,7 +571,11 @@ export function useBoardActions({
       const featureWorktreeState = currentProject
         ? getAutoModeState(currentProject.id, featureBranchName)
         : null;
-      const featureMaxConcurrency = featureWorktreeState?.maxConcurrency ?? autoMode.maxConcurrency;
+      // Use getMaxConcurrencyForWorktree which correctly falls back to global maxConcurrency
+      // instead of autoMode.maxConcurrency which only falls back to DEFAULT_MAX_CONCURRENCY (1)
+      const featureMaxConcurrency = currentProject
+        ? getMaxConcurrencyForWorktree(currentProject.id, featureBranchName)
+        : autoMode.maxConcurrency;
       const featureRunningCount = featureWorktreeState?.runningTasks?.length ?? 0;
       const canStartInWorktree = featureRunningCount < featureMaxConcurrency;
 
@@ -647,6 +656,7 @@ export function useBoardActions({
       handleRunFeature,
       currentProject,
       getAutoModeState,
+      getMaxConcurrencyForWorktree,
       isPrimaryWorktreeBranch,
     ]
   );
@@ -654,9 +664,28 @@ export function useBoardActions({
   const handleVerifyFeature = useCallback(
     async (feature: Feature) => {
       if (!currentProject) return;
-      verifyFeatureMutation.mutate(feature.id);
+      try {
+        const result = await verifyFeatureMutation.mutateAsync(feature.id);
+        if (result.passes) {
+          // Immediately move card to verified column (optimistic update)
+          moveFeature(feature.id, 'verified');
+          persistFeatureUpdate(feature.id, {
+            status: 'verified',
+            justFinishedAt: undefined,
+          });
+          toast.success('Verification passed', {
+            description: `Verified: ${truncateDescription(feature.description)}`,
+          });
+        } else {
+          toast.error('Verification failed', {
+            description: `Tests did not pass for: ${truncateDescription(feature.description)}`,
+          });
+        }
+      } catch {
+        // Error toast is already shown by the mutation's onError handler
+      }
     },
-    [currentProject, verifyFeatureMutation]
+    [currentProject, verifyFeatureMutation, moveFeature, persistFeatureUpdate]
   );
 
   const handleResumeFeature = useCallback(
@@ -897,17 +926,41 @@ export function useBoardActions({
 
   const handleUnarchiveFeature = useCallback(
     (feature: Feature) => {
-      const updates = {
+      // Determine the branch to restore to:
+      // - If the feature had a branch assigned, keep it (preserves worktree context)
+      // - If no branch was assigned, it will show on the primary worktree
+      const featureBranch = feature.branchName;
+      const branchLabel = featureBranch ?? 'primary worktree';
+
+      // Check if the feature will be visible on the current worktree view
+      const willBeVisibleOnCurrentView = !featureBranch
+        ? !currentWorktreeBranch ||
+          (projectPath ? isPrimaryWorktreeBranch(projectPath, currentWorktreeBranch) : true)
+        : featureBranch === currentWorktreeBranch;
+
+      const updates: Partial<Feature> = {
         status: 'verified' as const,
       };
       updateFeature(feature.id, updates);
       persistFeatureUpdate(feature.id, updates);
 
-      toast.success('Feature restored', {
-        description: `Moved back to verified: ${truncateDescription(feature.description)}`,
-      });
+      if (willBeVisibleOnCurrentView) {
+        toast.success('Feature restored', {
+          description: `Moved back to verified: ${truncateDescription(feature.description)}`,
+        });
+      } else {
+        toast.success('Feature restored', {
+          description: `Moved back to verified on branch "${branchLabel}": ${truncateDescription(feature.description)}`,
+        });
+      }
     },
-    [updateFeature, persistFeatureUpdate]
+    [
+      updateFeature,
+      persistFeatureUpdate,
+      currentWorktreeBranch,
+      projectPath,
+      isPrimaryWorktreeBranch,
+    ]
   );
 
   const handleViewOutput = useCallback(
@@ -1067,28 +1120,52 @@ export function useBoardActions({
 
   const handleArchiveAllVerified = useCallback(async () => {
     const verifiedFeatures = features.filter((f) => f.status === 'verified');
+    if (verifiedFeatures.length === 0) return;
 
+    // Optimistically update all features in the UI immediately
     for (const feature of verifiedFeatures) {
-      const isRunning = runningAutoTasks.includes(feature.id);
-      if (isRunning) {
-        try {
-          await autoMode.stopFeature(feature.id);
-        } catch (error) {
-          logger.error('Error stopping feature before archive:', error);
-        }
-      }
-      // Archive the feature by setting status to completed
-      const updates = {
-        status: 'completed' as const,
-      };
-      updateFeature(feature.id, updates);
-      persistFeatureUpdate(feature.id, updates);
+      updateFeature(feature.id, { status: 'completed' as const });
     }
 
-    toast.success('All verified features archived', {
-      description: `Archived ${verifiedFeatures.length} feature(s).`,
-    });
-  }, [features, runningAutoTasks, autoMode, updateFeature, persistFeatureUpdate]);
+    // Stop any running features in parallel (non-blocking for the UI)
+    const runningVerified = verifiedFeatures.filter((f) => runningAutoTasks.includes(f.id));
+    if (runningVerified.length > 0) {
+      await Promise.allSettled(
+        runningVerified.map((feature) =>
+          autoMode.stopFeature(feature.id).catch((error) => {
+            logger.error('Error stopping feature before archive:', error);
+          })
+        )
+      );
+    }
+
+    // Use bulk update API for a single server request instead of N individual calls
+    try {
+      if (currentProject) {
+        const api = getHttpApiClient();
+        const featureIds = verifiedFeatures.map((f) => f.id);
+        const result = await api.features.bulkUpdate(currentProject.path, featureIds, {
+          status: 'completed' as const,
+        });
+
+        if (result.success) {
+          // Refresh features from server to sync React Query cache
+          loadFeatures();
+          toast.success('All verified features archived', {
+            description: `Archived ${verifiedFeatures.length} feature(s).`,
+          });
+        } else {
+          logger.error('Bulk archive failed:', result);
+          // Reload features to sync state with server
+          loadFeatures();
+        }
+      }
+    } catch (error) {
+      logger.error('Failed to bulk archive features:', error);
+      // Reload features to sync state with server on error
+      loadFeatures();
+    }
+  }, [features, runningAutoTasks, autoMode, updateFeature, currentProject, loadFeatures]);
 
   const handleDuplicateFeature = useCallback(
     async (feature: Feature, asChild: boolean = false) => {
@@ -1122,6 +1199,81 @@ export function useBoardActions({
     [handleAddFeature]
   );
 
+  const handleDuplicateAsChildMultiple = useCallback(
+    async (feature: Feature, count: number) => {
+      // Guard: reject non-positive counts
+      if (count <= 0) {
+        toast.error('Invalid duplicate count', {
+          description: 'Count must be a positive number.',
+        });
+        return;
+      }
+
+      // Cap count to prevent runaway API calls
+      const effectiveCount = Math.min(count, MAX_DUPLICATES);
+
+      // Create a chain of duplicates, each a child of the previous, so they execute sequentially
+      let parentFeature = feature;
+      let successCount = 0;
+
+      for (let i = 0; i < effectiveCount; i++) {
+        const {
+          id: _id,
+          status: _status,
+          startedAt: _startedAt,
+          error: _error,
+          summary: _summary,
+          spec: _spec,
+          passes: _passes,
+          planSpec: _planSpec,
+          descriptionHistory: _descriptionHistory,
+          titleGenerating: _titleGenerating,
+          ...featureData
+        } = parentFeature;
+
+        const duplicatedFeatureData = {
+          ...featureData,
+          // Each duplicate depends on the previous one in the chain
+          dependencies: [parentFeature.id],
+        };
+
+        try {
+          const newFeature = await handleAddFeature(duplicatedFeatureData);
+
+          // Use the returned feature directly as the parent for the next iteration,
+          // avoiding a fragile assumption that the newest feature is the last item in the store
+          if (newFeature) {
+            parentFeature = newFeature;
+          }
+          successCount++;
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          toast.error(
+            `Failed after creating ${successCount} of ${effectiveCount} duplicate${effectiveCount !== 1 ? 's' : ''}`,
+            {
+              description: errorMessage,
+            }
+          );
+          return;
+        }
+      }
+
+      if (successCount === effectiveCount) {
+        toast.success(`Created ${successCount} chained duplicate${successCount !== 1 ? 's' : ''}`, {
+          description: `Created ${successCount} sequential ${successCount !== 1 ? 'copies' : 'copy'} of: ${truncateDescription(feature.description || feature.title || '')}`,
+        });
+      } else {
+        toast.info(
+          `Partially created ${successCount} of ${effectiveCount} chained duplicate${effectiveCount !== 1 ? 's' : ''}`,
+          {
+            description: `Created ${successCount} sequential ${successCount !== 1 ? 'copies' : 'copy'} of: ${truncateDescription(feature.description || feature.title || '')}`,
+          }
+        );
+      }
+    },
+    [handleAddFeature]
+  );
+
   return {
     handleAddFeature,
     handleUpdateFeature,
@@ -1143,5 +1295,6 @@ export function useBoardActions({
     handleStartNextFeatures,
     handleArchiveAllVerified,
     handleDuplicateFeature,
+    handleDuplicateAsChildMultiple,
   };
 }

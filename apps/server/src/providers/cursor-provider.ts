@@ -31,7 +31,7 @@ import type {
 } from './types.js';
 import { validateBareModelId } from '@automaker/types';
 import { validateApiKey } from '../lib/auth-utils.js';
-import { getEffectivePermissions } from '../services/cursor-config-service.js';
+import { getEffectivePermissions, detectProfile } from '../services/cursor-config-service.js';
 import {
   type CursorStreamEvent,
   type CursorSystemEvent,
@@ -69,6 +69,7 @@ interface CursorToolHandler<TArgs = unknown, TResult = unknown> {
  * Registry of Cursor tool handlers
  * Each handler knows how to normalize its specific tool call type
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- handler registry stores heterogeneous tool type parameters
 const CURSOR_TOOL_HANDLERS: Record<string, CursorToolHandler<any, any>> = {
   readToolCall: {
     name: 'Read',
@@ -877,8 +878,12 @@ export class CursorProvider extends CliProvider {
 
     logger.debug(`CursorProvider.executeQuery called with model: "${options.model}"`);
 
-    // Get effective permissions for this project
+    // Get effective permissions for this project and detect the active profile
     const effectivePermissions = await getEffectivePermissions(options.cwd || process.cwd());
+    const activeProfile = detectProfile(effectivePermissions);
+    logger.debug(
+      `Active permission profile: ${activeProfile ?? 'none'}, permissions: ${JSON.stringify(effectivePermissions)}`
+    );
 
     // Debug: log raw events when AUTOMAKER_DEBUG_RAW_OUTPUT is enabled
     const debugRawEvents =

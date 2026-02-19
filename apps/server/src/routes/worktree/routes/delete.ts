@@ -6,7 +6,8 @@ import type { Request, Response } from 'express';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { isGitRepo } from '@automaker/git-utils';
-import { getErrorMessage, logError, isValidBranchName, execGitCommand } from '../common.js';
+import { getErrorMessage, logError, isValidBranchName } from '../common.js';
+import { execGitCommand } from '../../../lib/git.js';
 import { createLogger } from '@automaker/utils';
 
 const execAsync = promisify(exec);
@@ -51,7 +52,7 @@ export function createDeleteHandler() {
       // Remove the worktree (using array arguments to prevent injection)
       try {
         await execGitCommand(['worktree', 'remove', worktreePath, '--force'], projectPath);
-      } catch (error) {
+      } catch {
         // Try with prune if remove fails
         await execGitCommand(['worktree', 'prune'], projectPath);
       }

@@ -34,7 +34,7 @@ import type { ApiKeys } from './settings-types';
 import type { ChatMessage, ChatSession } from './chat-types';
 import type { TerminalState, TerminalPanelContent, PersistedTerminalState } from './terminal-types';
 import type { Feature, ProjectAnalysis } from './project-types';
-import type { ClaudeUsage, CodexUsage } from './usage-types';
+import type { ClaudeUsage, CodexUsage, ZaiUsage, GeminiUsage } from './usage-types';
 
 /** State for worktree init script execution */
 export interface InitScriptState {
@@ -187,6 +187,8 @@ export interface AppState {
   codexApprovalPolicy: 'untrusted' | 'on-failure' | 'on-request' | 'never'; // Approval policy
   codexEnableWebSearch: boolean; // Enable web search capability
   codexEnableImages: boolean; // Enable image processing
+  codexAdditionalDirs: string[]; // Additional directories with write access (--add-dir flags)
+  codexThreadId: string | undefined; // Last thread ID for session resumption
 
   // OpenCode CLI Settings (global)
   // Static OpenCode settings are persisted via SETTINGS_FIELDS_TO_SYNC
@@ -295,6 +297,14 @@ export interface AppState {
   codexUsage: CodexUsage | null;
   codexUsageLastUpdated: number | null;
 
+  // z.ai Usage Tracking
+  zaiUsage: ZaiUsage | null;
+  zaiUsageLastUpdated: number | null;
+
+  // Gemini Usage Tracking
+  geminiUsage: GeminiUsage | null;
+  geminiUsageLastUpdated: number | null;
+
   // Codex Models (dynamically fetched)
   codexModels: Array<{
     id: string;
@@ -332,6 +342,10 @@ export interface AppState {
   // Use Worktrees Override (per-project, keyed by project path)
   // undefined = use global setting, true/false = project-specific override
   useWorktreesByProject: Record<string, boolean | undefined>;
+
+  // Worktree Copy Files (per-project, keyed by project path)
+  // List of relative file paths to copy from project root into new worktrees
+  worktreeCopyFilesByProject: Record<string, string[]>;
 
   // UI State (previously in localStorage, now synced via API)
   /** Whether worktree panel is collapsed in board view */
@@ -748,6 +762,10 @@ export interface AppActions {
   getProjectUseWorktrees: (projectPath: string) => boolean | undefined; // undefined = using global
   getEffectiveUseWorktrees: (projectPath: string) => boolean; // Returns actual value (project or global fallback)
 
+  // Worktree Copy Files actions (per-project)
+  setWorktreeCopyFiles: (projectPath: string, files: string[]) => void;
+  getWorktreeCopyFiles: (projectPath: string) => string[];
+
   // UI State actions (previously in localStorage, now synced via API)
   setWorktreePanelCollapsed: (collapsed: boolean) => void;
   setLastProjectDir: (dir: string) => void;
@@ -761,6 +779,12 @@ export interface AppActions {
 
   // Codex Usage Tracking actions
   setCodexUsage: (usage: CodexUsage | null) => void;
+
+  // z.ai Usage Tracking actions
+  setZaiUsage: (usage: ZaiUsage | null) => void;
+
+  // Gemini Usage Tracking actions
+  setGeminiUsage: (usage: GeminiUsage | null, lastUpdated?: number) => void;
 
   // Codex Models actions
   fetchCodexModels: (forceRefresh?: boolean) => Promise<void>;

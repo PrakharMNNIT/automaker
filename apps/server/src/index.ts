@@ -66,6 +66,10 @@ import { createCodexRoutes } from './routes/codex/index.js';
 import { CodexUsageService } from './services/codex-usage-service.js';
 import { CodexAppServerService } from './services/codex-app-server-service.js';
 import { CodexModelCacheService } from './services/codex-model-cache-service.js';
+import { createZaiRoutes } from './routes/zai/index.js';
+import { ZaiUsageService } from './services/zai-usage-service.js';
+import { createGeminiRoutes } from './routes/gemini/index.js';
+import { GeminiUsageService } from './services/gemini-usage-service.js';
 import { createGitHubRoutes } from './routes/github/index.js';
 import { createContextRoutes } from './routes/context/index.js';
 import { createBacklogPlanRoutes } from './routes/backlog-plan/index.js';
@@ -300,7 +304,7 @@ app.use(
           callback(null, origin);
           return;
         }
-      } catch (err) {
+      } catch {
         // Ignore URL parsing errors
       }
 
@@ -328,6 +332,8 @@ const claudeUsageService = new ClaudeUsageService();
 const codexAppServerService = new CodexAppServerService();
 const codexModelCacheService = new CodexModelCacheService(DATA_DIR, codexAppServerService);
 const codexUsageService = new CodexUsageService(codexAppServerService);
+const zaiUsageService = new ZaiUsageService();
+const geminiUsageService = new GeminiUsageService();
 const mcpTestService = new MCPTestService(settingsService);
 const ideationService = new IdeationService(events, settingsService, featureLoader);
 
@@ -372,7 +378,7 @@ eventHookService.initialize(events, settingsService, eventHistoryService, featur
   let globalSettings: Awaited<ReturnType<typeof settingsService.getGlobalSettings>> | null = null;
   try {
     globalSettings = await settingsService.getGlobalSettings();
-  } catch (err) {
+  } catch {
     logger.warn('Failed to load global settings, using defaults');
   }
 
@@ -390,7 +396,7 @@ eventHookService.initialize(events, settingsService, eventHistoryService, featur
       const enableRequestLog = globalSettings.enableRequestLogging ?? true;
       setRequestLoggingEnabled(enableRequestLog);
       logger.info(`HTTP request logging: ${enableRequestLog ? 'enabled' : 'disabled'}`);
-    } catch (err) {
+    } catch {
       logger.warn('Failed to apply logging settings, using defaults');
     }
   }
@@ -416,6 +422,22 @@ eventHookService.initialize(events, settingsService, eventHistoryService, featur
           );
         } else {
           logger.info('[STARTUP] Feature state reconciliation complete - no stale states found');
+        }
+
+        // Resume interrupted features in the background after reconciliation.
+        // This uses the saved execution state to identify features that were running
+        // before the restart (their statuses have been reset to ready/backlog by
+        // reconciliation above). Running in background so it doesn't block startup.
+        if (totalReconciled > 0) {
+          for (const project of globalSettings.projects) {
+            autoModeService.resumeInterruptedFeatures(project.path).catch((err) => {
+              logger.warn(
+                `[STARTUP] Failed to resume interrupted features for ${project.path}:`,
+                err
+              );
+            });
+          }
+          logger.info('[STARTUP] Initiated background resume of interrupted features');
         }
       }
     } catch (err) {
@@ -473,6 +495,8 @@ app.use('/api/terminal', createTerminalRoutes());
 app.use('/api/settings', createSettingsRoutes(settingsService));
 app.use('/api/claude', createClaudeRoutes(claudeUsageService));
 app.use('/api/codex', createCodexRoutes(codexUsageService, codexModelCacheService));
+app.use('/api/zai', createZaiRoutes(zaiUsageService, settingsService));
+app.use('/api/gemini', createGeminiRoutes(geminiUsageService, events));
 app.use('/api/github', createGitHubRoutes(events, settingsService));
 app.use('/api/context', createContextRoutes(settingsService));
 app.use('/api/backlog-plan', createBacklogPlanRoutes(events, settingsService));
@@ -575,7 +599,7 @@ wss.on('connection', (ws: WebSocket) => {
       logger.info('Sending event to client:', {
         type,
         messageLength: message.length,
-        sessionId: (payload as any)?.sessionId,
+        sessionId: (payload as Record<string, unknown>)?.sessionId,
       });
       ws.send(message);
     } else {
@@ -641,8 +665,15 @@ terminalWss.on('connection', (ws: WebSocket, req: import('http').IncomingMessage
   // Check if session exists
   const session = terminalService.getSession(sessionId);
   if (!session) {
-    logger.info(`Session ${sessionId} not found`);
-    ws.close(4004, 'Session not found');
+    logger.warn(
+      `Terminal session ${sessionId} not found. ` +
+        `The session may have exited, been deleted, or was never created. ` +
+        `Active terminal sessions: ${terminalService.getSessionCount()}`
+    );
+    ws.close(
+      4004,
+      'Session not found. The terminal session may have expired or been closed. Please create a new terminal.'
+    );
     return;
   }
 

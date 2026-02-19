@@ -16,6 +16,7 @@ import {
   Globe,
   GitPullRequest,
   FlaskConical,
+  AlertTriangle,
 } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
@@ -34,6 +35,8 @@ import {
   truncateBranchName,
   getPRBadgeStyles,
   getChangesBadgeStyles,
+  getConflictBadgeStyles,
+  getConflictTypeLabel,
   getTestStatusStyles,
 } from './worktree-indicator-utils';
 
@@ -91,6 +94,7 @@ export interface WorktreeDropdownProps {
   onOpenInIntegratedTerminal: (worktree: WorktreeInfo, mode?: 'tab' | 'split') => void;
   onOpenInExternalTerminal: (worktree: WorktreeInfo, terminalId?: string) => void;
   onViewChanges: (worktree: WorktreeInfo) => void;
+  onViewCommits: (worktree: WorktreeInfo) => void;
   onDiscardChanges: (worktree: WorktreeInfo) => void;
   onCommit: (worktree: WorktreeInfo) => void;
   onCreatePR: (worktree: WorktreeInfo) => void;
@@ -107,6 +111,16 @@ export interface WorktreeDropdownProps {
   onStartTests: (worktree: WorktreeInfo) => void;
   onStopTests: (worktree: WorktreeInfo) => void;
   onViewTestLogs: (worktree: WorktreeInfo) => void;
+  /** Stash changes for this worktree */
+  onStashChanges?: (worktree: WorktreeInfo) => void;
+  /** View stashes for this worktree */
+  onViewStashes?: (worktree: WorktreeInfo) => void;
+  /** Cherry-pick commits from another branch */
+  onCherryPick?: (worktree: WorktreeInfo) => void;
+  /** Abort an in-progress merge/rebase/cherry-pick */
+  onAbortOperation?: (worktree: WorktreeInfo) => void;
+  /** Continue an in-progress merge/rebase/cherry-pick after resolving conflicts */
+  onContinueOperation?: (worktree: WorktreeInfo) => void;
 }
 
 /**
@@ -168,6 +182,7 @@ export function WorktreeDropdown({
   onOpenInIntegratedTerminal,
   onOpenInExternalTerminal,
   onViewChanges,
+  onViewCommits,
   onDiscardChanges,
   onCommit,
   onCreatePR,
@@ -184,6 +199,11 @@ export function WorktreeDropdown({
   onStartTests,
   onStopTests,
   onViewTestLogs,
+  onStashChanges,
+  onViewStashes,
+  onCherryPick,
+  onAbortOperation,
+  onContinueOperation,
 }: WorktreeDropdownProps) {
   // Find the currently selected worktree to display in the trigger
   const selectedWorktree = worktrees.find((w) => isWorktreeSelected(w));
@@ -309,6 +329,20 @@ export function WorktreeDropdown({
             title="Auto Mode Running"
           >
             <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+          </span>
+        )}
+
+        {/* Conflict indicator */}
+        {selectedWorktree?.hasConflicts && (
+          <span
+            className={cn(
+              'inline-flex items-center justify-center h-4 min-w-4 px-1 text-[10px] font-medium rounded border shrink-0',
+              getConflictBadgeStyles()
+            )}
+            title={`${getConflictTypeLabel(selectedWorktree.conflictType)} conflicts detected`}
+          >
+            <AlertTriangle className="w-2.5 h-2.5 mr-0.5" />
+            {getConflictTypeLabel(selectedWorktree.conflictType)}
           </span>
         )}
 
@@ -442,6 +476,7 @@ export function WorktreeDropdown({
           isDevServerRunning={isDevServerRunning(selectedWorktree)}
           devServerInfo={getDevServerInfo(selectedWorktree)}
           gitRepoStatus={gitRepoStatus}
+          isLoadingGitStatus={isLoadingBranches}
           isAutoModeRunning={isAutoModeRunningForWorktree(selectedWorktree)}
           hasTestCommand={hasTestCommand}
           isStartingTests={isStartingTests}
@@ -455,6 +490,7 @@ export function WorktreeDropdown({
           onOpenInIntegratedTerminal={onOpenInIntegratedTerminal}
           onOpenInExternalTerminal={onOpenInExternalTerminal}
           onViewChanges={onViewChanges}
+          onViewCommits={onViewCommits}
           onDiscardChanges={onDiscardChanges}
           onCommit={onCommit}
           onCreatePR={onCreatePR}
@@ -471,6 +507,11 @@ export function WorktreeDropdown({
           onStartTests={onStartTests}
           onStopTests={onStopTests}
           onViewTestLogs={onViewTestLogs}
+          onStashChanges={onStashChanges}
+          onViewStashes={onViewStashes}
+          onCherryPick={onCherryPick}
+          onAbortOperation={onAbortOperation}
+          onContinueOperation={onContinueOperation}
           hasInitScript={hasInitScript}
         />
       )}

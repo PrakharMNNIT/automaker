@@ -1,8 +1,9 @@
 import * as path from 'path';
 import * as fs from 'fs';
+import * as crypto from 'crypto';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import electron from 'vite-plugin-electron/simple';
 import { TanStackRouterVite } from '@tanstack/router-plugin/vite';
 import { fileURLToPath } from 'url';
@@ -12,6 +13,127 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Read version from package.json
 const packageJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8'));
 const appVersion = packageJson.version;
+
+// Generate a build hash for cache busting.
+// Uses git commit hash when available (deterministic across CI builds),
+// falls back to version + timestamp for non-git environments.
+// This ensures users get fresh SW caches after each deployment.
+function getBuildHash(): string {
+  // Try git commit hash first (deterministic, same across CI workers)
+  try {
+    const { execSync } = require('child_process');
+    const gitHash = execSync('git rev-parse --short=8 HEAD', { encoding: 'utf-8' }).trim();
+    if (gitHash) return gitHash;
+  } catch {
+    // Not a git repo or git not available — fall back
+  }
+  // Fallback: version + timestamp (unique per build)
+  return crypto.createHash('md5').update(`${appVersion}-${Date.now()}`).digest('hex').slice(0, 8);
+}
+
+const buildHash = getBuildHash();
+
+/**
+ * Vite plugin to inject the build hash into sw.js for cache busting.
+ *
+ * Problem: CACHE_NAME = 'automaker-v3' is hardcoded in the service worker.
+ * After a deployment, users may continue getting stale HTML from the SW cache
+ * if someone forgets to manually bump the version.
+ *
+ * Solution: Replace the hardcoded version with a build-time hash so the
+ * SW cache is automatically invalidated on each deployment.
+ */
+function swCacheBuster(): Plugin {
+  const CACHE_NAME_PATTERN = /const CACHE_NAME = 'automaker-v3';/;
+  return {
+    name: 'sw-cache-buster',
+    // In build mode: copy sw.js to output with hash injected
+    // In dev mode: no transformation needed (sw.js is served from public/)
+    apply: 'build',
+    closeBundle() {
+      const swPath = path.resolve(__dirname, 'dist', 'sw.js');
+      if (!fs.existsSync(swPath)) {
+        console.warn('[sw-cache-buster] sw.js not found in dist/ — skipping cache bust');
+        return;
+      }
+      const swContent = fs.readFileSync(swPath, 'utf-8');
+      if (!CACHE_NAME_PATTERN.test(swContent)) {
+        console.error(
+          '[sw-cache-buster] Could not find CACHE_NAME declaration in sw.js. ' +
+            'The service worker cache will NOT be busted on this deploy! ' +
+            "Check that public/sw.js still contains: const CACHE_NAME = 'automaker-v3';"
+        );
+        return;
+      }
+      const updated = swContent.replace(
+        CACHE_NAME_PATTERN,
+        `const CACHE_NAME = 'automaker-v3-${buildHash}';`
+      );
+      fs.writeFileSync(swPath, updated, 'utf-8');
+      console.log(`[sw-cache-buster] Injected build hash: automaker-v3-${buildHash}`);
+    },
+  };
+}
+
+/**
+ * Vite plugin to optimize the HTML output for mobile PWA loading speed.
+ *
+ * Problem: Vite adds modulepreload links for ALL vendor chunks in index.html,
+ * including heavy route-specific libraries like ReactFlow (172KB), xterm (676KB),
+ * and CodeMirror (436KB). On mobile, these modulepreloads compete with critical
+ * resources for bandwidth, delaying First Contentful Paint by 500ms+.
+ *
+ * Solution: Convert modulepreload to prefetch for route-specific vendor chunks.
+ * - modulepreload: Browser parses + compiles immediately (blocks FCP)
+ * - prefetch: Browser downloads at lowest priority during idle (no FCP impact)
+ *
+ * This means these chunks are still cached for when the user navigates to their
+ * respective routes, but they don't block the initial page load.
+ */
+function mobilePreloadOptimizer(): Plugin {
+  // Vendor chunks that are route-specific and should NOT block initial load.
+  // These libraries are only needed on specific routes:
+  // - vendor-reactflow: /graph route only
+  // - vendor-xterm: /terminal route only
+  // - vendor-codemirror: spec/XML editor routes only
+  // - vendor-markdown: agent view, wiki, and other markdown-rendering routes
+  const deferredChunks = [
+    'vendor-reactflow',
+    'vendor-xterm',
+    'vendor-codemirror',
+    'vendor-markdown',
+  ];
+
+  return {
+    name: 'mobile-preload-optimizer',
+    enforce: 'post',
+    transformIndexHtml(html) {
+      // Convert modulepreload to prefetch for deferred chunks
+      // This preserves the caching benefit while eliminating the FCP penalty
+      for (const chunk of deferredChunks) {
+        // Match modulepreload links for this chunk
+        const modulePreloadRegex = new RegExp(
+          `<link rel="modulepreload" crossorigin href="(\\./assets/${chunk}-[^"]+\\.js)">`,
+          'g'
+        );
+        html = html.replace(modulePreloadRegex, (_match, href) => {
+          return `<link rel="prefetch" href="${href}" as="script">`;
+        });
+
+        // Also convert eagerly-loaded CSS for these chunks to lower priority
+        const cssRegex = new RegExp(
+          `<link rel="stylesheet" crossorigin href="(\\./assets/${chunk}-[^"]+\\.css)">`,
+          'g'
+        );
+        html = html.replace(cssRegex, (_match, href) => {
+          return `<link rel="prefetch" href="${href}" as="style">`;
+        });
+      }
+
+      return html;
+    },
+  };
+}
 
 export default defineConfig(({ command }) => {
   // Only skip electron plugin during dev server in CI (no display available for Electron)
@@ -58,6 +180,11 @@ export default defineConfig(({ command }) => {
       }),
       tailwindcss(),
       react(),
+      // Mobile PWA optimization: demote route-specific vendor chunks from
+      // modulepreload (blocks FCP) to prefetch (background download)
+      mobilePreloadOptimizer(),
+      // Inject build hash into sw.js CACHE_NAME for automatic cache busting
+      swCacheBuster(),
     ],
     resolve: {
       alias: {
@@ -78,6 +205,12 @@ export default defineConfig(({ command }) => {
     },
     build: {
       outDir: 'dist',
+      // Target modern browsers for smaller output (no legacy polyfills)
+      target: 'esnext',
+      // Enable CSS code splitting for smaller initial CSS payload
+      cssCodeSplit: true,
+      // Increase chunk size warning to avoid over-splitting (which hurts HTTP/2 multiplexing)
+      chunkSizeWarningLimit: 600,
       rollupOptions: {
         external: [
           'child_process',
@@ -92,6 +225,53 @@ export default defineConfig(({ command }) => {
           'events',
           'readline',
         ],
+        output: {
+          // Manual chunks for optimal caching and loading on mobile
+          manualChunks(id) {
+            // Vendor: React core (rarely changes, cache long-term)
+            if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) {
+              return 'vendor-react';
+            }
+            // Vendor: TanStack Router + Query (used on every page)
+            if (id.includes('@tanstack/react-router') || id.includes('@tanstack/react-query')) {
+              return 'vendor-tanstack';
+            }
+            // Vendor: UI library - split Radix UI (critical) from Lucide icons (deferrable)
+            // Radix UI primitives are used on almost every page for dialogs, tooltips, etc.
+            if (id.includes('@radix-ui/')) {
+              return 'vendor-radix';
+            }
+            // Lucide icons: Split from Radix so tree-shaken icons don't bloat the critical path
+            if (id.includes('lucide-react')) {
+              return 'vendor-icons';
+            }
+            // Fonts: Each font family gets its own chunk (loaded on demand)
+            if (id.includes('@fontsource/')) {
+              const match = id.match(/@fontsource\/([^/]+)/);
+              if (match) return `font-${match[1]}`;
+            }
+            // CodeMirror: Heavy editor - only loaded when needed
+            if (id.includes('@codemirror/') || id.includes('@lezer/')) {
+              return 'vendor-codemirror';
+            }
+            // Xterm: Terminal - only loaded when needed
+            if (id.includes('xterm') || id.includes('@xterm/')) {
+              return 'vendor-xterm';
+            }
+            // React Flow: Graph visualization - only loaded on dependency graph view
+            if (id.includes('@xyflow/') || id.includes('reactflow')) {
+              return 'vendor-reactflow';
+            }
+            // Zustand + Zod: State management and validation
+            if (id.includes('zustand') || id.includes('zod')) {
+              return 'vendor-state';
+            }
+            // React Markdown: Only needed on routes with markdown rendering
+            if (id.includes('react-markdown') || id.includes('remark-') || id.includes('rehype-')) {
+              return 'vendor-markdown';
+            }
+          },
+        },
       },
     },
     optimizeDeps: {
@@ -99,6 +279,9 @@ export default defineConfig(({ command }) => {
     },
     define: {
       __APP_VERSION__: JSON.stringify(appVersion),
+      // Build hash injected for IDB cache busting — matches what swCacheBuster injects
+      // into the SW CACHE_NAME. When the build changes, both caches are invalidated together.
+      __APP_BUILD_HASH__: JSON.stringify(buildHash),
     },
   };
 });

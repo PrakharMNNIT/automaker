@@ -31,10 +31,21 @@ import {
   WorktreeDropdown,
 } from './components';
 import { useAppStore } from '@/store/app-store';
-import { ViewWorktreeChangesDialog, PushToRemoteDialog, MergeWorktreeDialog } from '../dialogs';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import {
+  ViewWorktreeChangesDialog,
+  ViewCommitsDialog,
+  PushToRemoteDialog,
+  MergeWorktreeDialog,
+  DiscardWorktreeChangesDialog,
+  SelectRemoteDialog,
+  StashChangesDialog,
+  ViewStashesDialog,
+  CherryPickDialog,
+  GitPullDialog,
+} from '../dialogs';
+import { StashConfirmDialog } from '../dialogs/stash-confirm-dialog';
+import type { SelectRemoteOperation } from '../dialogs';
 import { TestLogsPanel } from '@/components/ui/test-logs-panel';
-import { Undo2 } from 'lucide-react';
 import { getElectronAPI } from '@/lib/electron';
 
 /** Threshold for switching from tabs to dropdown layout (number of worktrees) */
@@ -50,6 +61,9 @@ export function WorktreePanel({
   onAddressPRComments,
   onResolveConflicts,
   onCreateMergeConflictResolutionFeature,
+  onBranchSwitchConflict,
+  onStashPopConflict,
+  onStashApplyConflict,
   onBranchDeletedDuringMerge,
   onRemovedWorktrees,
   runningFeatureIds = [],
@@ -96,12 +110,18 @@ export function WorktreePanel({
     isSwitching,
     isActivating,
     handleSwitchBranch,
-    handlePull,
+    handlePull: _handlePull,
     handlePush,
     handleOpenInIntegratedTerminal,
     handleOpenInEditor,
     handleOpenInExternalTerminal,
-  } = useWorktreeActions();
+    pendingSwitch,
+    confirmPendingSwitch,
+    cancelPendingSwitch,
+  } = useWorktreeActions({
+    onBranchSwitchConflict: onBranchSwitchConflict,
+    onStashPopConflict: onStashPopConflict,
+  });
 
   const { hasRunningFeatures } = useRunningFeatures({
     runningFeatureIds,
@@ -374,6 +394,10 @@ export function WorktreePanel({
   const [viewChangesDialogOpen, setViewChangesDialogOpen] = useState(false);
   const [viewChangesWorktree, setViewChangesWorktree] = useState<WorktreeInfo | null>(null);
 
+  // View commits dialog state
+  const [viewCommitsDialogOpen, setViewCommitsDialogOpen] = useState(false);
+  const [viewCommitsWorktree, setViewCommitsWorktree] = useState<WorktreeInfo | null>(null);
+
   // Discard changes confirmation dialog state
   const [discardChangesDialogOpen, setDiscardChangesDialogOpen] = useState(false);
   const [discardChangesWorktree, setDiscardChangesWorktree] = useState<WorktreeInfo | null>(null);
@@ -389,6 +413,26 @@ export function WorktreePanel({
   // Merge branch dialog state
   const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
   const [mergeWorktree, setMergeWorktree] = useState<WorktreeInfo | null>(null);
+
+  // Select remote dialog state (for pull/push with multiple remotes)
+  const [selectRemoteDialogOpen, setSelectRemoteDialogOpen] = useState(false);
+  const [selectRemoteWorktree, setSelectRemoteWorktree] = useState<WorktreeInfo | null>(null);
+  const [selectRemoteOperation, setSelectRemoteOperation] = useState<SelectRemoteOperation>('pull');
+
+  // Stash dialog states
+  const [stashChangesDialogOpen, setStashChangesDialogOpen] = useState(false);
+  const [stashChangesWorktree, setStashChangesWorktree] = useState<WorktreeInfo | null>(null);
+  const [viewStashesDialogOpen, setViewStashesDialogOpen] = useState(false);
+  const [viewStashesWorktree, setViewStashesWorktree] = useState<WorktreeInfo | null>(null);
+
+  // Cherry-pick dialog states
+  const [cherryPickDialogOpen, setCherryPickDialogOpen] = useState(false);
+  const [cherryPickWorktree, setCherryPickWorktree] = useState<WorktreeInfo | null>(null);
+
+  // Pull dialog states
+  const [pullDialogOpen, setPullDialogOpen] = useState(false);
+  const [pullDialogWorktree, setPullDialogWorktree] = useState<WorktreeInfo | null>(null);
+  const [pullDialogRemote, setPullDialogRemote] = useState<string | undefined>(undefined);
 
   const isMobile = useIsMobile();
 
@@ -458,35 +502,91 @@ export function WorktreePanel({
     setViewChangesDialogOpen(true);
   }, []);
 
+  const handleViewCommits = useCallback((worktree: WorktreeInfo) => {
+    setViewCommitsWorktree(worktree);
+    setViewCommitsDialogOpen(true);
+  }, []);
+
   const handleDiscardChanges = useCallback((worktree: WorktreeInfo) => {
     setDiscardChangesWorktree(worktree);
     setDiscardChangesDialogOpen(true);
   }, []);
 
-  const handleConfirmDiscardChanges = useCallback(async () => {
-    if (!discardChangesWorktree) return;
+  const handleDiscardCompleted = useCallback(() => {
+    fetchWorktrees({ silent: true });
+  }, [fetchWorktrees]);
 
-    try {
-      const api = getHttpApiClient();
-      const result = await api.worktree.discardChanges(discardChangesWorktree.path);
+  // Handle stash changes dialog
+  const handleStashChanges = useCallback((worktree: WorktreeInfo) => {
+    setStashChangesWorktree(worktree);
+    setStashChangesDialogOpen(true);
+  }, []);
 
-      if (result.success) {
-        toast.success('Changes discarded', {
-          description: `Discarded changes in ${discardChangesWorktree.branch}`,
-        });
-        // Refresh worktrees to update the changes status
-        fetchWorktrees({ silent: true });
-      } else {
-        toast.error('Failed to discard changes', {
-          description: result.error || 'Unknown error',
+  const handleStashCompleted = useCallback(() => {
+    fetchWorktrees({ silent: true });
+  }, [fetchWorktrees]);
+
+  // Handle view stashes dialog
+  const handleViewStashes = useCallback((worktree: WorktreeInfo) => {
+    setViewStashesWorktree(worktree);
+    setViewStashesDialogOpen(true);
+  }, []);
+
+  const handleStashApplied = useCallback(() => {
+    fetchWorktrees({ silent: true });
+  }, [fetchWorktrees]);
+
+  // Handle cherry-pick dialog
+  const handleCherryPick = useCallback((worktree: WorktreeInfo) => {
+    setCherryPickWorktree(worktree);
+    setCherryPickDialogOpen(true);
+  }, []);
+
+  const handleCherryPicked = useCallback(() => {
+    fetchWorktrees({ silent: true });
+  }, [fetchWorktrees]);
+
+  // Handle aborting an in-progress merge/rebase/cherry-pick
+  const handleAbortOperation = useCallback(
+    async (worktree: WorktreeInfo) => {
+      try {
+        const api = getHttpApiClient();
+        const result = await api.worktree.abortOperation(worktree.path);
+        if (result.success && result.result) {
+          toast.success(result.result.message || 'Operation aborted successfully');
+          fetchWorktrees({ silent: true });
+        } else {
+          toast.error(result.error || 'Failed to abort operation');
+        }
+      } catch (error) {
+        toast.error('Failed to abort operation', {
+          description: error instanceof Error ? error.message : 'Unknown error',
         });
       }
-    } catch (error) {
-      toast.error('Failed to discard changes', {
-        description: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-  }, [discardChangesWorktree, fetchWorktrees]);
+    },
+    [fetchWorktrees]
+  );
+
+  // Handle continuing an in-progress merge/rebase/cherry-pick after conflict resolution
+  const handleContinueOperation = useCallback(
+    async (worktree: WorktreeInfo) => {
+      try {
+        const api = getHttpApiClient();
+        const result = await api.worktree.continueOperation(worktree.path);
+        if (result.success && result.result) {
+          toast.success(result.result.message || 'Operation continued successfully');
+          fetchWorktrees({ silent: true });
+        } else {
+          toast.error(result.error || 'Failed to continue operation');
+        }
+      } catch (error) {
+        toast.error('Failed to continue operation', {
+          description: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    },
+    [fetchWorktrees]
+  );
 
   // Handle opening the log panel for a specific worktree
   const handleViewDevServerLogs = useCallback((worktree: WorktreeInfo) => {
@@ -505,6 +605,89 @@ export function WorktreePanel({
     setPushToRemoteWorktree(worktree);
     setPushToRemoteDialogOpen(true);
   }, []);
+
+  // Handle pull completed - refresh worktrees
+  const handlePullCompleted = useCallback(() => {
+    fetchWorktrees({ silent: true });
+  }, [fetchWorktrees]);
+
+  // Handle pull with remote selection when multiple remotes exist
+  // Now opens the pull dialog which handles stash management and conflict resolution
+  const handlePullWithRemoteSelection = useCallback(async (worktree: WorktreeInfo) => {
+    try {
+      const api = getHttpApiClient();
+      const result = await api.worktree.listRemotes(worktree.path);
+
+      if (result.success && result.result && result.result.remotes.length > 1) {
+        // Multiple remotes - show selection dialog first
+        setSelectRemoteWorktree(worktree);
+        setSelectRemoteOperation('pull');
+        setSelectRemoteDialogOpen(true);
+      } else if (result.success && result.result && result.result.remotes.length === 1) {
+        // Exactly one remote - open pull dialog directly with that remote
+        const remoteName = result.result.remotes[0].name;
+        setPullDialogRemote(remoteName);
+        setPullDialogWorktree(worktree);
+        setPullDialogOpen(true);
+      } else {
+        // No remotes - open pull dialog with default
+        setPullDialogRemote(undefined);
+        setPullDialogWorktree(worktree);
+        setPullDialogOpen(true);
+      }
+    } catch {
+      // If listing remotes fails, open pull dialog with default
+      setPullDialogRemote(undefined);
+      setPullDialogWorktree(worktree);
+      setPullDialogOpen(true);
+    }
+  }, []);
+
+  // Handle push with remote selection when multiple remotes exist
+  const handlePushWithRemoteSelection = useCallback(
+    async (worktree: WorktreeInfo) => {
+      try {
+        const api = getHttpApiClient();
+        const result = await api.worktree.listRemotes(worktree.path);
+
+        if (result.success && result.result && result.result.remotes.length > 1) {
+          // Multiple remotes - show selection dialog
+          setSelectRemoteWorktree(worktree);
+          setSelectRemoteOperation('push');
+          setSelectRemoteDialogOpen(true);
+        } else if (result.success && result.result && result.result.remotes.length === 1) {
+          // Exactly one remote - use it directly
+          const remoteName = result.result.remotes[0].name;
+          handlePush(worktree, remoteName);
+        } else {
+          // No remotes - proceed with default behavior
+          handlePush(worktree);
+        }
+      } catch {
+        // If listing remotes fails, fall back to default behavior
+        handlePush(worktree);
+      }
+    },
+    [handlePush]
+  );
+
+  // Handle confirming remote selection for pull/push
+  const handleConfirmSelectRemote = useCallback(
+    async (worktree: WorktreeInfo, remote: string) => {
+      if (selectRemoteOperation === 'pull') {
+        // Open the pull dialog with the selected remote
+        setPullDialogRemote(remote);
+        setPullDialogWorktree(worktree);
+        setPullDialogOpen(true);
+        await _handlePull(worktree, remote);
+      } else {
+        await handlePush(worktree, remote);
+      }
+      fetchBranches(worktree.path);
+      fetchWorktrees();
+    },
+    [selectRemoteOperation, _handlePull, handlePush, fetchBranches, fetchWorktrees]
+  );
 
   // Handle confirming the push to remote dialog
   const handleConfirmPushToRemote = useCallback(
@@ -600,19 +783,21 @@ export function WorktreePanel({
             isDevServerRunning={isDevServerRunning(selectedWorktree)}
             devServerInfo={getDevServerInfo(selectedWorktree)}
             gitRepoStatus={gitRepoStatus}
+            isLoadingGitStatus={isLoadingBranches}
             isAutoModeRunning={isAutoModeRunningForWorktree(selectedWorktree)}
             hasTestCommand={hasTestCommand}
             isStartingTests={isStartingTests}
             isTestRunning={isTestRunningForWorktree(selectedWorktree)}
             testSessionInfo={getTestSessionInfo(selectedWorktree)}
             onOpenChange={handleActionsDropdownOpenChange(selectedWorktree)}
-            onPull={handlePull}
-            onPush={handlePush}
+            onPull={handlePullWithRemoteSelection}
+            onPush={handlePushWithRemoteSelection}
             onPushNewBranch={handlePushNewBranch}
             onOpenInEditor={handleOpenInEditor}
             onOpenInIntegratedTerminal={handleOpenInIntegratedTerminal}
             onOpenInExternalTerminal={handleOpenInExternalTerminal}
             onViewChanges={handleViewChanges}
+            onViewCommits={handleViewCommits}
             onDiscardChanges={handleDiscardChanges}
             onCommit={onCommit}
             onCreatePR={onCreatePR}
@@ -629,6 +814,11 @@ export function WorktreePanel({
             onStartTests={handleStartTests}
             onStopTests={handleStopTests}
             onViewTestLogs={handleViewTestLogs}
+            onStashChanges={handleStashChanges}
+            onViewStashes={handleViewStashes}
+            onCherryPick={handleCherryPick}
+            onAbortOperation={handleAbortOperation}
+            onContinueOperation={handleContinueOperation}
             hasInitScript={hasInitScript}
           />
         )}
@@ -671,17 +861,69 @@ export function WorktreePanel({
           projectPath={projectPath}
         />
 
-        {/* Discard Changes Confirmation Dialog */}
-        <ConfirmDialog
+        {/* View Commits Dialog */}
+        <ViewCommitsDialog
+          open={viewCommitsDialogOpen}
+          onOpenChange={setViewCommitsDialogOpen}
+          worktree={viewCommitsWorktree}
+        />
+
+        {/* Discard Changes Dialog */}
+        <DiscardWorktreeChangesDialog
           open={discardChangesDialogOpen}
           onOpenChange={setDiscardChangesDialogOpen}
-          onConfirm={handleConfirmDiscardChanges}
-          title="Discard Changes"
-          description={`Are you sure you want to discard all changes in "${discardChangesWorktree?.branch}"? This will reset staged changes, discard modifications to tracked files, and remove untracked files. This action cannot be undone.`}
-          icon={Undo2}
-          iconClassName="text-destructive"
-          confirmText="Discard Changes"
-          confirmVariant="destructive"
+          worktree={discardChangesWorktree}
+          onDiscarded={handleDiscardCompleted}
+        />
+
+        {/* Stash Changes Dialog */}
+        <StashChangesDialog
+          open={stashChangesDialogOpen}
+          onOpenChange={setStashChangesDialogOpen}
+          worktree={stashChangesWorktree}
+          onStashed={handleStashCompleted}
+        />
+
+        {/* Stash Confirm Dialog for Branch Switching */}
+        <StashConfirmDialog
+          open={!!pendingSwitch}
+          onOpenChange={(isOpen) => {
+            if (!isOpen) cancelPendingSwitch();
+          }}
+          operationDescription={
+            pendingSwitch ? `switch to branch '${pendingSwitch.branchName}'` : ''
+          }
+          changesInfo={pendingSwitch?.changesInfo ?? null}
+          onConfirm={confirmPendingSwitch}
+          isLoading={isSwitching}
+        />
+
+        {/* View Stashes Dialog */}
+        <ViewStashesDialog
+          open={viewStashesDialogOpen}
+          onOpenChange={setViewStashesDialogOpen}
+          worktree={viewStashesWorktree}
+          onStashApplied={handleStashApplied}
+          onStashApplyConflict={onStashApplyConflict}
+        />
+
+        {/* Cherry Pick Dialog */}
+        <CherryPickDialog
+          open={cherryPickDialogOpen}
+          onOpenChange={setCherryPickDialogOpen}
+          worktree={cherryPickWorktree}
+          onCherryPicked={handleCherryPicked}
+          onCreateConflictResolutionFeature={onCreateMergeConflictResolutionFeature}
+        />
+
+        {/* Git Pull Dialog */}
+        <GitPullDialog
+          open={pullDialogOpen}
+          onOpenChange={setPullDialogOpen}
+          worktree={pullDialogWorktree}
+          remote={pullDialogRemote}
+          onPulled={handlePullCompleted}
+          onCreateConflictResolutionFeature={onCreateMergeConflictResolutionFeature}
         />
 
         {/* Dev Server Logs Panel */}
@@ -699,6 +941,15 @@ export function WorktreePanel({
           onOpenChange={setPushToRemoteDialogOpen}
           worktree={pushToRemoteWorktree}
           onConfirm={handleConfirmPushToRemote}
+        />
+
+        {/* Select Remote Dialog (for pull/push with multiple remotes) */}
+        <SelectRemoteDialog
+          open={selectRemoteDialogOpen}
+          onOpenChange={setSelectRemoteDialogOpen}
+          worktree={selectRemoteWorktree}
+          operation={selectRemoteOperation}
+          onConfirm={handleConfirmSelectRemote}
         />
 
         {/* Merge Branch Dialog */}
@@ -773,13 +1024,14 @@ export function WorktreePanel({
             isStartingTests={isStartingTests}
             hasInitScript={hasInitScript}
             onActionsDropdownOpenChange={handleActionsDropdownOpenChange}
-            onPull={handlePull}
-            onPush={handlePush}
+            onPull={handlePullWithRemoteSelection}
+            onPush={handlePushWithRemoteSelection}
             onPushNewBranch={handlePushNewBranch}
             onOpenInEditor={handleOpenInEditor}
             onOpenInIntegratedTerminal={handleOpenInIntegratedTerminal}
             onOpenInExternalTerminal={handleOpenInExternalTerminal}
             onViewChanges={handleViewChanges}
+            onViewCommits={handleViewCommits}
             onDiscardChanges={handleDiscardChanges}
             onCommit={onCommit}
             onCreatePR={onCreatePR}
@@ -796,6 +1048,11 @@ export function WorktreePanel({
             onStartTests={handleStartTests}
             onStopTests={handleStopTests}
             onViewTestLogs={handleViewTestLogs}
+            onStashChanges={handleStashChanges}
+            onViewStashes={handleViewStashes}
+            onCherryPick={handleCherryPick}
+            onAbortOperation={handleAbortOperation}
+            onContinueOperation={handleContinueOperation}
           />
 
           {useWorktreesEnabled && (
@@ -866,13 +1123,14 @@ export function WorktreePanel({
                 onBranchFilterChange={setBranchFilter}
                 onSwitchBranch={handleSwitchBranch}
                 onCreateBranch={onCreateBranch}
-                onPull={handlePull}
-                onPush={handlePush}
+                onPull={handlePullWithRemoteSelection}
+                onPush={handlePushWithRemoteSelection}
                 onPushNewBranch={handlePushNewBranch}
                 onOpenInEditor={handleOpenInEditor}
                 onOpenInIntegratedTerminal={handleOpenInIntegratedTerminal}
                 onOpenInExternalTerminal={handleOpenInExternalTerminal}
                 onViewChanges={handleViewChanges}
+                onViewCommits={handleViewCommits}
                 onDiscardChanges={handleDiscardChanges}
                 onCommit={onCommit}
                 onCreatePR={onCreatePR}
@@ -889,6 +1147,11 @@ export function WorktreePanel({
                 onStartTests={handleStartTests}
                 onStopTests={handleStopTests}
                 onViewTestLogs={handleViewTestLogs}
+                onStashChanges={handleStashChanges}
+                onViewStashes={handleViewStashes}
+                onCherryPick={handleCherryPick}
+                onAbortOperation={handleAbortOperation}
+                onContinueOperation={handleContinueOperation}
                 hasInitScript={hasInitScript}
                 hasTestCommand={hasTestCommand}
               />
@@ -939,13 +1202,14 @@ export function WorktreePanel({
                       onBranchFilterChange={setBranchFilter}
                       onSwitchBranch={handleSwitchBranch}
                       onCreateBranch={onCreateBranch}
-                      onPull={handlePull}
-                      onPush={handlePush}
+                      onPull={handlePullWithRemoteSelection}
+                      onPush={handlePushWithRemoteSelection}
                       onPushNewBranch={handlePushNewBranch}
                       onOpenInEditor={handleOpenInEditor}
                       onOpenInIntegratedTerminal={handleOpenInIntegratedTerminal}
                       onOpenInExternalTerminal={handleOpenInExternalTerminal}
                       onViewChanges={handleViewChanges}
+                      onViewCommits={handleViewCommits}
                       onDiscardChanges={handleDiscardChanges}
                       onCommit={onCommit}
                       onCreatePR={onCreatePR}
@@ -962,6 +1226,11 @@ export function WorktreePanel({
                       onStartTests={handleStartTests}
                       onStopTests={handleStopTests}
                       onViewTestLogs={handleViewTestLogs}
+                      onStashChanges={handleStashChanges}
+                      onViewStashes={handleViewStashes}
+                      onCherryPick={handleCherryPick}
+                      onAbortOperation={handleAbortOperation}
+                      onContinueOperation={handleContinueOperation}
                       hasInitScript={hasInitScript}
                       hasTestCommand={hasTestCommand}
                     />
@@ -1007,17 +1276,19 @@ export function WorktreePanel({
         projectPath={projectPath}
       />
 
-      {/* Discard Changes Confirmation Dialog */}
-      <ConfirmDialog
+      {/* View Commits Dialog */}
+      <ViewCommitsDialog
+        open={viewCommitsDialogOpen}
+        onOpenChange={setViewCommitsDialogOpen}
+        worktree={viewCommitsWorktree}
+      />
+
+      {/* Discard Changes Dialog */}
+      <DiscardWorktreeChangesDialog
         open={discardChangesDialogOpen}
         onOpenChange={setDiscardChangesDialogOpen}
-        onConfirm={handleConfirmDiscardChanges}
-        title="Discard Changes"
-        description={`Are you sure you want to discard all changes in "${discardChangesWorktree?.branch}"? This will reset staged changes, discard modifications to tracked files, and remove untracked files. This action cannot be undone.`}
-        icon={Undo2}
-        iconClassName="text-destructive"
-        confirmText="Discard Changes"
-        confirmVariant="destructive"
+        worktree={discardChangesWorktree}
+        onDiscarded={handleDiscardCompleted}
       />
 
       {/* Dev Server Logs Panel */}
@@ -1035,6 +1306,15 @@ export function WorktreePanel({
         onOpenChange={setPushToRemoteDialogOpen}
         worktree={pushToRemoteWorktree}
         onConfirm={handleConfirmPushToRemote}
+      />
+
+      {/* Select Remote Dialog (for pull/push with multiple remotes) */}
+      <SelectRemoteDialog
+        open={selectRemoteDialogOpen}
+        onOpenChange={setSelectRemoteDialogOpen}
+        worktree={selectRemoteWorktree}
+        operation={selectRemoteOperation}
+        onConfirm={handleConfirmSelectRemote}
       />
 
       {/* Merge Branch Dialog */}
@@ -1056,6 +1336,53 @@ export function WorktreePanel({
         onStopTests={
           testLogsPanelWorktree ? () => handleStopTests(testLogsPanelWorktree) : undefined
         }
+      />
+
+      {/* Stash Changes Dialog */}
+      <StashChangesDialog
+        open={stashChangesDialogOpen}
+        onOpenChange={setStashChangesDialogOpen}
+        worktree={stashChangesWorktree}
+        onStashed={handleStashCompleted}
+      />
+
+      {/* Stash Confirm Dialog for Branch Switching */}
+      <StashConfirmDialog
+        open={!!pendingSwitch}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) cancelPendingSwitch();
+        }}
+        operationDescription={pendingSwitch ? `switch to branch '${pendingSwitch.branchName}'` : ''}
+        changesInfo={pendingSwitch?.changesInfo ?? null}
+        onConfirm={confirmPendingSwitch}
+        isLoading={isSwitching}
+      />
+
+      {/* View Stashes Dialog */}
+      <ViewStashesDialog
+        open={viewStashesDialogOpen}
+        onOpenChange={setViewStashesDialogOpen}
+        worktree={viewStashesWorktree}
+        onStashApplied={handleStashApplied}
+      />
+
+      {/* Cherry Pick Dialog */}
+      <CherryPickDialog
+        open={cherryPickDialogOpen}
+        onOpenChange={setCherryPickDialogOpen}
+        worktree={cherryPickWorktree}
+        onCherryPicked={handleCherryPicked}
+        onCreateConflictResolutionFeature={onCreateMergeConflictResolutionFeature}
+      />
+
+      {/* Git Pull Dialog */}
+      <GitPullDialog
+        open={pullDialogOpen}
+        onOpenChange={setPullDialogOpen}
+        worktree={pullDialogWorktree}
+        remote={pullDialogRemote}
+        onPulled={handlePullCompleted}
+        onCreateConflictResolutionFeature={onCreateMergeConflictResolutionFeature}
       />
     </div>
   );

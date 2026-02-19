@@ -13,6 +13,8 @@ import { promisify } from 'util';
 import path from 'path';
 import * as secureFs from '../../../lib/secure-fs.js';
 import type { EventEmitter } from '../../../lib/events.js';
+import type { SettingsService } from '../../../services/settings-service.js';
+import { WorktreeService } from '../../../services/worktree-service.js';
 import { isGitRepo } from '@automaker/git-utils';
 import {
   getErrorMessage,
@@ -20,8 +22,8 @@ import {
   normalizePath,
   ensureInitialCommit,
   isValidBranchName,
-  execGitCommand,
 } from '../common.js';
+import { execGitCommand } from '../../../lib/git.js';
 import { trackBranch } from './branch-tracking.js';
 import { createLogger } from '@automaker/utils';
 import { runInitScript } from '../../../services/init-script-service.js';
@@ -81,7 +83,9 @@ async function findExistingWorktreeForBranch(
   }
 }
 
-export function createCreateHandler(events: EventEmitter) {
+export function createCreateHandler(events: EventEmitter, settingsService?: SettingsService) {
+  const worktreeService = new WorktreeService();
+
   return async (req: Request, res: Response): Promise<void> => {
     try {
       const { projectPath, branchName, baseBranch } = req.body as {
@@ -199,6 +203,20 @@ export function createCreateHandler(events: EventEmitter) {
       // Resolve to absolute path for cross-platform compatibility
       // normalizePath converts to forward slashes for API consistency
       const absoluteWorktreePath = path.resolve(worktreePath);
+
+      // Copy configured files into the new worktree before responding
+      // This runs synchronously to ensure files are in place before any init script
+      try {
+        await worktreeService.copyConfiguredFiles(
+          projectPath,
+          absoluteWorktreePath,
+          settingsService,
+          events
+        );
+      } catch (copyErr) {
+        // Log but don't fail worktree creation – files may be partially copied
+        logger.warn('Some configured files failed to copy to worktree:', copyErr);
+      }
 
       // Respond immediately (non-blocking)
       res.json({

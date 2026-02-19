@@ -42,6 +42,27 @@ export class AgentExecutor {
   private static readonly WRITE_DEBOUNCE_MS = 500;
   private static readonly STREAM_HEARTBEAT_MS = 15_000;
 
+  /**
+   * Sanitize a provider error value into clean text.
+   * Coalesces to string, removes ANSI codes, strips leading "Error:" prefix,
+   * trims, and returns 'Unknown error' when empty.
+   */
+  private static sanitizeProviderError(input: string | { error?: string } | undefined): string {
+    let raw: string;
+    if (typeof input === 'string') {
+      raw = input;
+    } else if (input && typeof input === 'object' && typeof input.error === 'string') {
+      raw = input.error;
+    } else {
+      raw = '';
+    }
+    const cleaned = raw
+      .replace(/\x1b\[[0-9;]*m/g, '')
+      .replace(/^Error:\s*/i, '')
+      .trim();
+    return cleaned || 'Unknown error';
+  }
+
   constructor(
     private eventBus: TypedEventBus,
     private featureStateManager: FeatureStateManager,
@@ -255,7 +276,7 @@ export class AgentExecutor {
             }
           }
         } else if (msg.type === 'error') {
-          throw new Error(msg.error || 'Unknown error');
+          throw new Error(AgentExecutor.sanitizeProviderError(msg.error));
         } else if (msg.type === 'result' && msg.subtype === 'success') scheduleWrite();
       }
       await writeToFile();
@@ -390,9 +411,15 @@ export class AgentExecutor {
                 input: b.input,
               });
           }
-        } else if (msg.type === 'error')
-          throw new Error(msg.error || `Error during task ${task.id}`);
-        else if (msg.type === 'result' && msg.subtype === 'success') {
+        } else if (msg.type === 'error') {
+          // Clean the error: strip ANSI codes and redundant "Error: " prefix
+          const cleanedError =
+            (msg.error || `Error during task ${task.id}`)
+              .replace(/\x1b\[[0-9;]*m/g, '')
+              .replace(/^Error:\s*/i, '')
+              .trim() || `Error during task ${task.id}`;
+          throw new Error(cleanedError);
+        } else if (msg.type === 'result' && msg.subtype === 'success') {
           taskOutput += msg.result || '';
           responseText += msg.result || '';
         }
@@ -444,17 +471,11 @@ export class AgentExecutor {
     callbacks: AgentExecutorCallbacks
   ): Promise<{ responseText: string; tasksCompleted: number }> {
     const {
-      workDir,
       featureId,
       projectPath,
-      abortController,
       branchName = null,
       planningMode = 'skip',
       provider,
-      effectiveBareModel,
-      credentials,
-      claudeCompatibleProvider,
-      mcpServers,
       sdkOptions,
     } = options;
     let responseText = initialResponseText,
@@ -562,7 +583,14 @@ export class AgentExecutor {
                     content: b.text,
                   });
                 }
-            if (msg.type === 'error') throw new Error(msg.error || 'Error during plan revision');
+            if (msg.type === 'error') {
+              const cleanedError =
+                (msg.error || 'Error during plan revision')
+                  .replace(/\x1b\[[0-9;]*m/g, '')
+                  .replace(/^Error:\s*/i, '')
+                  .trim() || 'Error during plan revision';
+              throw new Error(cleanedError);
+            }
             if (msg.type === 'result' && msg.subtype === 'success') revText += msg.result || '';
           }
           const mi = revText.indexOf('[SPEC_GENERATED]');
@@ -680,9 +708,15 @@ export class AgentExecutor {
               input: b.input,
             });
         }
-      else if (msg.type === 'error')
-        throw new Error(msg.error || 'Unknown error during implementation');
-      else if (msg.type === 'result' && msg.subtype === 'success') responseText += msg.result || '';
+      else if (msg.type === 'error') {
+        const cleanedError =
+          (msg.error || 'Unknown error during implementation')
+            .replace(/\x1b\[[0-9;]*m/g, '')
+            .replace(/^Error:\s*/i, '')
+            .trim() || 'Unknown error during implementation';
+        throw new Error(cleanedError);
+      } else if (msg.type === 'result' && msg.subtype === 'success')
+        responseText += msg.result || '';
     }
     return { responseText };
   }

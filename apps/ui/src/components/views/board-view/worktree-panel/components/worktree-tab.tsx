@@ -1,6 +1,6 @@
 import type { JSX } from 'react';
 import { Button } from '@/components/ui/button';
-import { Globe, CircleDot, GitPullRequest } from 'lucide-react';
+import { Globe, CircleDot, GitPullRequest, AlertTriangle } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -15,6 +15,7 @@ import type {
 } from '../types';
 import { BranchSwitchDropdown } from './branch-switch-dropdown';
 import { WorktreeActionsDropdown } from './worktree-actions-dropdown';
+import { getConflictBadgeStyles, getConflictTypeLabel } from './worktree-indicator-utils';
 
 interface WorktreeTabProps {
   worktree: WorktreeInfo;
@@ -59,6 +60,7 @@ interface WorktreeTabProps {
   onOpenInIntegratedTerminal: (worktree: WorktreeInfo, mode?: 'tab' | 'split') => void;
   onOpenInExternalTerminal: (worktree: WorktreeInfo, terminalId?: string) => void;
   onViewChanges: (worktree: WorktreeInfo) => void;
+  onViewCommits: (worktree: WorktreeInfo) => void;
   onDiscardChanges: (worktree: WorktreeInfo) => void;
   onCommit: (worktree: WorktreeInfo) => void;
   onCreatePR: (worktree: WorktreeInfo) => void;
@@ -78,6 +80,16 @@ interface WorktreeTabProps {
   onStopTests?: (worktree: WorktreeInfo) => void;
   /** View test logs for this worktree */
   onViewTestLogs?: (worktree: WorktreeInfo) => void;
+  /** Stash changes for this worktree */
+  onStashChanges?: (worktree: WorktreeInfo) => void;
+  /** View stashes for this worktree */
+  onViewStashes?: (worktree: WorktreeInfo) => void;
+  /** Cherry-pick commits from another branch */
+  onCherryPick?: (worktree: WorktreeInfo) => void;
+  /** Abort an in-progress merge/rebase/cherry-pick */
+  onAbortOperation?: (worktree: WorktreeInfo) => void;
+  /** Continue an in-progress merge/rebase/cherry-pick after resolving conflicts */
+  onContinueOperation?: (worktree: WorktreeInfo) => void;
   hasInitScript: boolean;
   /** Whether a test command is configured in project settings */
   hasTestCommand?: boolean;
@@ -122,6 +134,7 @@ export function WorktreeTab({
   onOpenInIntegratedTerminal,
   onOpenInExternalTerminal,
   onViewChanges,
+  onViewCommits,
   onDiscardChanges,
   onCommit,
   onCreatePR,
@@ -138,6 +151,11 @@ export function WorktreeTab({
   onStartTests,
   onStopTests,
   onViewTestLogs,
+  onStashChanges,
+  onViewStashes,
+  onCherryPick,
+  onAbortOperation,
+  onContinueOperation,
   hasInitScript,
   hasTestCommand = false,
 }: WorktreeTabProps) {
@@ -293,6 +311,29 @@ export function WorktreeTab({
                 </TooltipContent>
               </Tooltip>
             )}
+            {worktree.hasConflicts && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    className={cn(
+                      'inline-flex items-center justify-center h-4 min-w-[1rem] px-1 text-[10px] font-medium rounded border',
+                      isSelected ? 'bg-red-500 text-white border-red-400' : getConflictBadgeStyles()
+                    )}
+                  >
+                    <AlertTriangle className="w-2.5 h-2.5 mr-0.5" />
+                    {getConflictTypeLabel(worktree.conflictType)}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>
+                    {getConflictTypeLabel(worktree.conflictType)} conflicts detected
+                    {worktree.conflictFiles && worktree.conflictFiles.length > 0
+                      ? ` (${worktree.conflictFiles.length} file${worktree.conflictFiles.length !== 1 ? 's' : ''})`
+                      : ''}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            )}
             {prBadge}
           </Button>
           <BranchSwitchDropdown
@@ -360,6 +401,29 @@ export function WorktreeTab({
               </TooltipContent>
             </Tooltip>
           )}
+          {worktree.hasConflicts && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  className={cn(
+                    'inline-flex items-center justify-center h-4 min-w-[1rem] px-1 text-[10px] font-medium rounded border',
+                    isSelected ? 'bg-red-500 text-white border-red-400' : getConflictBadgeStyles()
+                  )}
+                >
+                  <AlertTriangle className="w-2.5 h-2.5 mr-0.5" />
+                  {getConflictTypeLabel(worktree.conflictType)}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>
+                  {getConflictTypeLabel(worktree.conflictType)} conflicts detected
+                  {worktree.conflictFiles && worktree.conflictFiles.length > 0
+                    ? ` (${worktree.conflictFiles.length} file${worktree.conflictFiles.length !== 1 ? 's' : ''})`
+                    : ''}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          )}
           {prBadge}
         </Button>
       )}
@@ -418,6 +482,7 @@ export function WorktreeTab({
         isDevServerRunning={isDevServerRunning}
         devServerInfo={devServerInfo}
         gitRepoStatus={gitRepoStatus}
+        isLoadingGitStatus={isLoadingBranches}
         isAutoModeRunning={isAutoModeRunning}
         hasTestCommand={hasTestCommand}
         isStartingTests={isStartingTests}
@@ -431,6 +496,7 @@ export function WorktreeTab({
         onOpenInIntegratedTerminal={onOpenInIntegratedTerminal}
         onOpenInExternalTerminal={onOpenInExternalTerminal}
         onViewChanges={onViewChanges}
+        onViewCommits={onViewCommits}
         onDiscardChanges={onDiscardChanges}
         onCommit={onCommit}
         onCreatePR={onCreatePR}
@@ -447,6 +513,11 @@ export function WorktreeTab({
         onStartTests={onStartTests}
         onStopTests={onStopTests}
         onViewTestLogs={onViewTestLogs}
+        onStashChanges={onStashChanges}
+        onViewStashes={onViewStashes}
+        onCherryPick={onCherryPick}
+        onAbortOperation={onAbortOperation}
+        onContinueOperation={onContinueOperation}
         hasInitScript={hasInitScript}
       />
     </div>

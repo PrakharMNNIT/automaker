@@ -1,6 +1,11 @@
 // Type definitions for Electron IPC API
 import type { SessionListItem, Message } from '@/types/electron';
-import type { ClaudeUsageResponse, CodexUsageResponse } from '@/store/app-store';
+import type {
+  ClaudeUsageResponse,
+  CodexUsageResponse,
+  ZaiUsageResponse,
+  GeminiUsageResponse,
+} from '@/store/app-store';
 import type {
   IssueValidationVerdict,
   IssueValidationConfidence,
@@ -197,6 +202,7 @@ export interface CreatePROptions {
   prBody?: string;
   baseBranch?: string;
   draft?: boolean;
+  remote?: string;
 }
 
 // Re-export types from electron.d.ts for external use
@@ -865,6 +871,18 @@ export interface ElectronAPI {
       error?: string;
     }>;
   };
+  zai?: {
+    getUsage: () => Promise<ZaiUsageResponse>;
+    verify: (apiKey: string) => Promise<{
+      success: boolean;
+      authenticated: boolean;
+      message?: string;
+      error?: string;
+    }>;
+  };
+  gemini?: {
+    getUsage: () => Promise<GeminiUsageResponse>;
+  };
   settings?: {
     getStatus: () => Promise<{
       success: boolean;
@@ -1360,6 +1378,65 @@ const _getMockElectronAPI = (): ElectronAPI => {
           costCurrency: null,
           lastUpdated: new Date().toISOString(),
           userTimezone: 'UTC',
+        };
+      },
+    },
+
+    // Mock z.ai API
+    zai: {
+      getUsage: async () => {
+        console.log('[Mock] Getting z.ai usage');
+        return {
+          quotaLimits: {
+            tokens: {
+              limitType: 'TOKENS_LIMIT',
+              limit: 1000000,
+              used: 250000,
+              remaining: 750000,
+              usedPercent: 25,
+              nextResetTime: Date.now() + 86400000,
+            },
+            time: {
+              limitType: 'TIME_LIMIT',
+              limit: 3600,
+              used: 900,
+              remaining: 2700,
+              usedPercent: 25,
+              nextResetTime: Date.now() + 3600000,
+            },
+            planType: 'standard',
+          },
+          lastUpdated: new Date().toISOString(),
+        };
+      },
+      verify: async (apiKey: string) => {
+        console.log('[Mock] Verifying z.ai API key');
+        // Mock successful verification if key is provided
+        if (apiKey && apiKey.trim().length > 0) {
+          return {
+            success: true,
+            authenticated: true,
+            message: 'Connection successful! z.ai API responded.',
+          };
+        }
+        return {
+          success: false,
+          authenticated: false,
+          error: 'Please provide an API key to test.',
+        };
+      },
+    },
+
+    // Mock Gemini API
+    gemini: {
+      getUsage: async () => {
+        console.log('[Mock] Getting Gemini usage');
+        return {
+          authenticated: true,
+          authMethod: 'cli_login',
+          usedPercent: 0,
+          remainingPercent: 100,
+          lastUpdated: new Date().toISOString(),
         };
       },
     },
@@ -2098,8 +2175,8 @@ function createMockWorktreeAPI(): WorktreeAPI {
       };
     },
 
-    commit: async (worktreePath: string, message: string) => {
-      console.log('[Mock] Committing changes:', { worktreePath, message });
+    commit: async (worktreePath: string, message: string, files?: string[]) => {
+      console.log('[Mock] Committing changes:', { worktreePath, message, files });
       return {
         success: true,
         result: {
@@ -2116,6 +2193,15 @@ function createMockWorktreeAPI(): WorktreeAPI {
       return {
         success: true,
         message: 'feat: Add mock commit message generation',
+      };
+    },
+
+    generatePRDescription: async (worktreePath: string, baseBranch?: string) => {
+      console.log('[Mock] Generating PR description for:', { worktreePath, baseBranch });
+      return {
+        success: true,
+        title: 'Add new feature implementation',
+        body: '## Summary\n- Added new feature\n\n## Changes\n- Implementation details here',
       };
     },
 
@@ -2173,22 +2259,50 @@ function createMockWorktreeAPI(): WorktreeAPI {
       };
     },
 
-    pull: async (worktreePath: string) => {
-      console.log('[Mock] Pulling latest changes for:', worktreePath);
+    stageFiles: async (worktreePath: string, files: string[], operation: 'stage' | 'unstage') => {
+      console.log('[Mock] Stage files:', { worktreePath, files, operation });
+      return {
+        success: true,
+        result: {
+          operation,
+          filesCount: files.length,
+        },
+      };
+    },
+
+    pull: async (worktreePath: string, remote?: string, stashIfNeeded?: boolean) => {
+      const targetRemote = remote || 'origin';
+      console.log('[Mock] Pulling latest changes for:', {
+        worktreePath,
+        remote: targetRemote,
+        stashIfNeeded,
+      });
       return {
         success: true,
         result: {
           branch: 'main',
           pulled: true,
-          message: 'Pulled latest changes',
+          message: `Pulled latest changes from ${targetRemote}`,
+          hasLocalChanges: false,
+          hasConflicts: false,
+          stashed: false,
+          stashRestored: false,
         },
       };
     },
 
-    checkoutBranch: async (worktreePath: string, branchName: string) => {
+    checkoutBranch: async (
+      worktreePath: string,
+      branchName: string,
+      baseBranch?: string,
+      stashChanges?: boolean,
+      _includeUntracked?: boolean
+    ) => {
       console.log('[Mock] Creating and checking out branch:', {
         worktreePath,
         branchName,
+        baseBranch,
+        stashChanges,
       });
       return {
         success: true,
@@ -2196,6 +2310,22 @@ function createMockWorktreeAPI(): WorktreeAPI {
           previousBranch: 'main',
           newBranch: branchName,
           message: `Created and checked out branch '${branchName}'`,
+          hasConflicts: false,
+          stashedChanges: stashChanges ?? false,
+        },
+      };
+    },
+
+    checkChanges: async (worktreePath: string) => {
+      console.log('[Mock] Checking for uncommitted changes:', worktreePath);
+      return {
+        success: true,
+        result: {
+          hasChanges: false,
+          staged: [],
+          unstaged: [],
+          untracked: [],
+          totalFiles: 0,
         },
       };
     },
@@ -2227,6 +2357,8 @@ function createMockWorktreeAPI(): WorktreeAPI {
           previousBranch: 'main',
           currentBranch: branchName,
           message: `Switched to branch '${branchName}'`,
+          hasConflicts: false,
+          stashedChanges: false,
         },
       };
     },
@@ -2496,8 +2628,8 @@ function createMockWorktreeAPI(): WorktreeAPI {
       };
     },
 
-    discardChanges: async (worktreePath: string) => {
-      console.log('[Mock] Discarding changes:', { worktreePath });
+    discardChanges: async (worktreePath: string, files?: string[]) => {
+      console.log('[Mock] Discarding changes:', { worktreePath, files });
       return {
         success: true,
         result: {
@@ -2555,6 +2687,135 @@ function createMockWorktreeAPI(): WorktreeAPI {
         console.log('[Mock] Unsubscribing from test runner events');
       };
     },
+
+    getCommitLog: async (worktreePath: string, limit?: number) => {
+      console.log('[Mock] Getting commit log:', { worktreePath, limit });
+      return {
+        success: true,
+        result: {
+          branch: 'main',
+          commits: [
+            {
+              hash: 'abc1234567890',
+              shortHash: 'abc1234',
+              author: 'Mock User',
+              authorEmail: 'mock@example.com',
+              date: new Date().toISOString(),
+              subject: 'Mock commit message',
+              body: '',
+              files: ['src/index.ts', 'package.json'],
+            },
+          ],
+          total: 1,
+        },
+      };
+    },
+    stashPush: async (worktreePath: string, message?: string, files?: string[]) => {
+      console.log('[Mock] Stash push:', { worktreePath, message, files });
+      return {
+        success: true,
+        result: {
+          stashed: true,
+          branch: 'main',
+          message: message || 'WIP on main',
+        },
+      };
+    },
+    stashList: async (worktreePath: string) => {
+      console.log('[Mock] Stash list:', { worktreePath });
+      return {
+        success: true,
+        result: {
+          stashes: [],
+          total: 0,
+        },
+      };
+    },
+    stashApply: async (worktreePath: string, stashIndex: number, pop?: boolean) => {
+      console.log('[Mock] Stash apply:', { worktreePath, stashIndex, pop });
+      return {
+        success: true,
+        result: {
+          applied: true,
+          hasConflicts: false,
+          conflictFiles: [] as string[],
+          operation: pop ? ('pop' as const) : ('apply' as const),
+          stashIndex,
+          message: `Stash ${pop ? 'popped' : 'applied'} successfully`,
+        },
+      };
+    },
+    stashDrop: async (worktreePath: string, stashIndex: number) => {
+      console.log('[Mock] Stash drop:', { worktreePath, stashIndex });
+      return {
+        success: true,
+        result: {
+          dropped: true,
+          stashIndex,
+          message: `Stash stash@{${stashIndex}} dropped successfully`,
+        },
+      };
+    },
+    cherryPick: async (
+      worktreePath: string,
+      commitHashes: string[],
+      options?: { noCommit?: boolean }
+    ) => {
+      console.log('[Mock] Cherry-pick:', { worktreePath, commitHashes, options });
+      return {
+        success: true,
+        result: {
+          cherryPicked: true,
+          commitHashes,
+          branch: 'main',
+          message: `Cherry-picked ${commitHashes.length} commit(s) successfully`,
+        },
+      };
+    },
+    getBranchCommitLog: async (worktreePath: string, branchName?: string, limit?: number) => {
+      console.log('[Mock] Get branch commit log:', { worktreePath, branchName, limit });
+      return {
+        success: true,
+        result: {
+          branch: branchName || 'main',
+          commits: [],
+          total: 0,
+        },
+      };
+    },
+    rebase: async (worktreePath: string, ontoBranch: string) => {
+      console.log('[Mock] Rebase:', { worktreePath, ontoBranch });
+      return {
+        success: true,
+        result: {
+          branch: 'current-branch',
+          ontoBranch,
+          message: `Successfully rebased onto ${ontoBranch}`,
+        },
+      };
+    },
+
+    abortOperation: async (worktreePath: string) => {
+      console.log('[Mock] Abort operation:', { worktreePath });
+      return {
+        success: true,
+        result: {
+          operation: 'merge',
+          message: 'Merge aborted successfully',
+        },
+      };
+    },
+
+    continueOperation: async (worktreePath: string) => {
+      console.log('[Mock] Continue operation:', { worktreePath });
+      return {
+        success: true,
+        result: {
+          operation: 'merge',
+          message: 'Merge continued successfully',
+        },
+      };
+    },
   };
 }
 
@@ -2580,6 +2841,17 @@ function createMockGitAPI(): GitAPI {
         success: true,
         diff: `diff --git a/${filePath} b/${filePath}\n+++ new file\n@@ -0,0 +1,5 @@\n+// New content`,
         filePath,
+      };
+    },
+
+    stageFiles: async (projectPath: string, files: string[], operation: 'stage' | 'unstage') => {
+      console.log('[Mock] Git stage files:', { projectPath, files, operation });
+      return {
+        success: true,
+        result: {
+          operation,
+          filesCount: files.length,
+        },
       };
     },
   };

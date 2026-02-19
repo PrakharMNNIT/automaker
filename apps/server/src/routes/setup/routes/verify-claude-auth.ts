@@ -110,6 +110,7 @@ export function createVerifyClaudeAuthHandler() {
       let authenticated = false;
       let errorMessage = '';
       let receivedAnyContent = false;
+      let cleanupEnv: (() => void) | undefined;
 
       // Create secure auth session
       const sessionId = `claude-auth-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -151,13 +152,13 @@ export function createVerifyClaudeAuthHandler() {
         AuthSessionManager.createSession(sessionId, authMethod || 'api_key', apiKey, 'anthropic');
 
         // Create temporary environment override for SDK call
-        const cleanupEnv = createTempEnvOverride(authEnv);
+        cleanupEnv = createTempEnvOverride(authEnv);
 
         // Run a minimal query to verify authentication
         const stream = query({
           prompt: "Reply with only the word 'ok'",
           options: {
-            model: 'claude-sonnet-4-20250514',
+            model: 'claude-sonnet-4-6',
             maxTurns: 1,
             allowedTools: [],
             abortController,
@@ -194,8 +195,10 @@ export function createVerifyClaudeAuthHandler() {
           }
 
           // Check specifically for assistant messages with text content
-          if (msg.type === 'assistant' && (msg as any).message?.content) {
-            const content = (msg as any).message.content;
+          const msgRecord = msg as Record<string, unknown>;
+          const msgMessage = msgRecord.message as Record<string, unknown> | undefined;
+          if (msg.type === 'assistant' && msgMessage?.content) {
+            const content = msgMessage.content;
             if (Array.isArray(content)) {
               for (const block of content) {
                 if (block.type === 'text' && block.text) {
@@ -311,6 +314,8 @@ export function createVerifyClaudeAuthHandler() {
         }
       } finally {
         clearTimeout(timeoutId);
+        // Restore process.env to its original state
+        cleanupEnv?.();
         // Clean up the auth session
         AuthSessionManager.destroySession(sessionId);
       }

@@ -37,6 +37,7 @@ import { BoardBackgroundModal } from '@/components/dialogs/board-background-moda
 import { Spinner } from '@/components/ui/spinner';
 import { useShallow } from 'zustand/react/shallow';
 import { useAutoMode } from '@/hooks/use-auto-mode';
+import { resolveModelString } from '@automaker/model-resolver';
 import { useWindowState } from '@/hooks/use-window-state';
 // Board-view specific imports
 import { BoardHeader } from './board-view/board-header';
@@ -49,10 +50,11 @@ import {
   ArchiveAllVerifiedDialog,
   DeleteCompletedFeatureDialog,
   DependencyLinkDialog,
+  DuplicateCountDialog,
   EditFeatureDialog,
   FollowUpDialog,
   PlanApprovalDialog,
-  PullResolveConflictsDialog,
+  MergeRebaseDialog,
 } from './board-view/dialogs';
 import type { DependencyLinkType } from './board-view/dialogs';
 import { PipelineSettingsDialog } from './board-view/dialogs/pipeline-settings-dialog';
@@ -62,7 +64,14 @@ import { CommitWorktreeDialog } from './board-view/dialogs/commit-worktree-dialo
 import { CreatePRDialog } from './board-view/dialogs/create-pr-dialog';
 import { CreateBranchDialog } from './board-view/dialogs/create-branch-dialog';
 import { WorktreePanel } from './board-view/worktree-panel';
-import type { PRInfo, WorktreeInfo, MergeConflictInfo } from './board-view/worktree-panel/types';
+import type {
+  PRInfo,
+  WorktreeInfo,
+  MergeConflictInfo,
+  BranchSwitchConflictInfo,
+  StashPopConflictInfo,
+  StashApplyConflictInfo,
+} from './board-view/worktree-panel/types';
 import { COLUMNS, getColumnsWithPipeline } from './board-view/constants';
 import {
   useBoardFeatures,
@@ -78,7 +87,8 @@ import {
   useListViewState,
 } from './board-view/hooks';
 import { SelectionActionBar, ListView } from './board-view/components';
-import { MassEditDialog } from './board-view/dialogs';
+import { MassEditDialog, BranchConflictDialog } from './board-view/dialogs';
+import type { BranchConflictData } from './board-view/dialogs';
 import { InitScriptIndicator } from './board-view/init-script-indicator';
 import { useInitScriptEvents } from '@/hooks/use-init-script-events';
 import { usePipelineConfig } from '@/hooks/queries';
@@ -165,17 +175,24 @@ export function BoardView() {
   // State for spawn task mode
   const [spawnParentFeature, setSpawnParentFeature] = useState<Feature | null>(null);
 
+  // State for duplicate as child multiple times dialog
+  const [duplicateMultipleFeature, setDuplicateMultipleFeature] = useState<Feature | null>(null);
+
   // Worktree dialog states
   const [showCreateWorktreeDialog, setShowCreateWorktreeDialog] = useState(false);
   const [showDeleteWorktreeDialog, setShowDeleteWorktreeDialog] = useState(false);
   const [showCommitWorktreeDialog, setShowCommitWorktreeDialog] = useState(false);
   const [showCreatePRDialog, setShowCreatePRDialog] = useState(false);
   const [showCreateBranchDialog, setShowCreateBranchDialog] = useState(false);
-  const [showPullResolveConflictsDialog, setShowPullResolveConflictsDialog] = useState(false);
+  const [showMergeRebaseDialog, setShowMergeRebaseDialog] = useState(false);
   const [selectedWorktreeForAction, setSelectedWorktreeForAction] = useState<WorktreeInfo | null>(
     null
   );
   const [worktreeRefreshKey, setWorktreeRefreshKey] = useState(0);
+
+  // Branch conflict dialog state (for branch switch and stash pop conflicts)
+  const [branchConflictData, setBranchConflictData] = useState<BranchConflictData | null>(null);
+  const [showBranchConflictDialog, setShowBranchConflictDialog] = useState(false);
 
   // Backlog plan dialog state
   const [showPlanDialog, setShowPlanDialog] = useState(false);
@@ -591,6 +608,7 @@ export function BoardView() {
     handleStartNextFeatures,
     handleArchiveAllVerified,
     handleDuplicateFeature,
+    handleDuplicateAsChildMultiple,
   } = useBoardActions({
     currentProject,
     features: hookFeatures,
@@ -856,166 +874,7 @@ export function BoardView() {
     }
   }, [currentProject, selectedFeatureIds, loadFeatures, exitSelectionMode]);
 
-  // Handler for addressing PR comments - creates a feature and starts it automatically
-  const handleAddressPRComments = useCallback(
-    async (worktree: WorktreeInfo, prInfo: PRInfo) => {
-      // Use a simple prompt that instructs the agent to read and address PR feedback
-      // The agent will fetch the PR comments directly, which is more reliable and up-to-date
-      const prNumber = prInfo.number;
-      const description = `Read the review requests on PR #${prNumber} and address any feedback the best you can.`;
-
-      // Create the feature
-      const featureData = {
-        title: `Address PR #${prNumber} Review Comments`,
-        category: 'PR Review',
-        description,
-        images: [],
-        imagePaths: [],
-        skipTests: defaultSkipTests,
-        model: 'opus' as const,
-        thinkingLevel: 'none' as const,
-        branchName: worktree.branch,
-        workMode: 'custom' as const, // Use the worktree's branch
-        priority: 1, // High priority for PR feedback
-        planningMode: 'skip' as const,
-        requirePlanApproval: false,
-      };
-
-      // Capture existing feature IDs before adding
-      const featuresBeforeIds = new Set(useAppStore.getState().features.map((f) => f.id));
-      try {
-        await handleAddFeature(featureData);
-      } catch (error) {
-        logger.error('Failed to create PR comments feature:', error);
-        toast.error('Failed to create feature', {
-          description: error instanceof Error ? error.message : 'An error occurred',
-        });
-        return;
-      }
-
-      // Find the newly created feature by looking for an ID that wasn't in the original set
-      const latestFeatures = useAppStore.getState().features;
-      const newFeature = latestFeatures.find((f) => !featuresBeforeIds.has(f.id));
-
-      if (newFeature) {
-        await handleStartImplementation(newFeature);
-      } else {
-        logger.error('Could not find newly created feature to start it automatically.');
-        toast.error('Failed to auto-start feature', {
-          description: 'The feature was created but could not be started automatically.',
-        });
-      }
-    },
-    [handleAddFeature, handleStartImplementation, defaultSkipTests]
-  );
-
-  // Handler for resolving conflicts - opens dialog to select remote branch, then creates a feature
-  const handleResolveConflicts = useCallback((worktree: WorktreeInfo) => {
-    setSelectedWorktreeForAction(worktree);
-    setShowPullResolveConflictsDialog(true);
-  }, []);
-
-  // Handler called when user confirms the pull & resolve conflicts dialog
-  const handleConfirmResolveConflicts = useCallback(
-    async (worktree: WorktreeInfo, remoteBranch: string) => {
-      const description = `Pull latest from ${remoteBranch} and resolve conflicts. Merge ${remoteBranch} into the current branch (${worktree.branch}), resolving any merge conflicts that arise. After resolving conflicts, ensure the code compiles and tests pass.`;
-
-      // Create the feature
-      const featureData = {
-        title: `Resolve Merge Conflicts: ${remoteBranch} → ${worktree.branch}`,
-        category: 'Maintenance',
-        description,
-        images: [],
-        imagePaths: [],
-        skipTests: defaultSkipTests,
-        model: 'opus' as const,
-        thinkingLevel: 'none' as const,
-        branchName: worktree.branch,
-        workMode: 'custom' as const, // Use the worktree's branch
-        priority: 1, // High priority for conflict resolution
-        planningMode: 'skip' as const,
-        requirePlanApproval: false,
-      };
-
-      // Capture existing feature IDs before adding
-      const featuresBeforeIds = new Set(useAppStore.getState().features.map((f) => f.id));
-      try {
-        await handleAddFeature(featureData);
-      } catch (error) {
-        logger.error('Failed to create resolve conflicts feature:', error);
-        toast.error('Failed to create feature', {
-          description: error instanceof Error ? error.message : 'An error occurred',
-        });
-        return;
-      }
-
-      // Find the newly created feature by looking for an ID that wasn't in the original set
-      const latestFeatures = useAppStore.getState().features;
-      const newFeature = latestFeatures.find((f) => !featuresBeforeIds.has(f.id));
-
-      if (newFeature) {
-        await handleStartImplementation(newFeature);
-      } else {
-        logger.error('Could not find newly created feature to start it automatically.');
-        toast.error('Failed to auto-start feature', {
-          description: 'The feature was created but could not be started automatically.',
-        });
-      }
-    },
-    [handleAddFeature, handleStartImplementation, defaultSkipTests]
-  );
-
-  // Handler called when merge fails due to conflicts and user wants to create a feature to resolve them
-  const handleCreateMergeConflictResolutionFeature = useCallback(
-    async (conflictInfo: MergeConflictInfo) => {
-      const description = `Resolve merge conflicts when merging "${conflictInfo.sourceBranch}" into "${conflictInfo.targetBranch}". The merge was started but encountered conflicts that need to be resolved manually. After resolving all conflicts, ensure the code compiles and tests pass, then complete the merge by committing the resolved changes.`;
-
-      // Create the feature
-      const featureData = {
-        title: `Resolve Merge Conflicts: ${conflictInfo.sourceBranch} → ${conflictInfo.targetBranch}`,
-        category: 'Maintenance',
-        description,
-        images: [],
-        imagePaths: [],
-        skipTests: defaultSkipTests,
-        model: 'opus' as const,
-        thinkingLevel: 'none' as const,
-        branchName: conflictInfo.targetBranch,
-        workMode: 'custom' as const, // Use the target branch where conflicts need to be resolved
-        priority: 1, // High priority for conflict resolution
-        planningMode: 'skip' as const,
-        requirePlanApproval: false,
-      };
-
-      // Capture existing feature IDs before adding
-      const featuresBeforeIds = new Set(useAppStore.getState().features.map((f) => f.id));
-      try {
-        await handleAddFeature(featureData);
-      } catch (error) {
-        logger.error('Failed to create merge conflict resolution feature:', error);
-        toast.error('Failed to create feature', {
-          description: error instanceof Error ? error.message : 'An error occurred',
-        });
-        return;
-      }
-
-      // Find the newly created feature by looking for an ID that wasn't in the original set
-      const latestFeatures = useAppStore.getState().features;
-      const newFeature = latestFeatures.find((f) => !featuresBeforeIds.has(f.id));
-
-      if (newFeature) {
-        await handleStartImplementation(newFeature);
-      } else {
-        logger.error('Could not find newly created feature to start it automatically.');
-        toast.error('Failed to auto-start feature', {
-          description: 'The feature was created but could not be started automatically.',
-        });
-      }
-    },
-    [handleAddFeature, handleStartImplementation, defaultSkipTests]
-  );
-
-  // Handler for "Make" button - creates a feature and immediately starts it
+  // Helper that creates a feature and immediately starts it (used by conflict handlers and the Make button)
   const handleAddAndStartFeature = useCallback(
     async (featureData: Parameters<typeof handleAddFeature>[0]) => {
       // Capture existing feature IDs before adding
@@ -1044,6 +903,194 @@ export function BoardView() {
       }
     },
     [handleAddFeature, handleStartImplementation]
+  );
+
+  // Handler for addressing PR comments - creates a feature and starts it automatically
+  const handleAddressPRComments = useCallback(
+    async (worktree: WorktreeInfo, prInfo: PRInfo) => {
+      // Use a simple prompt that instructs the agent to read and address PR feedback
+      // The agent will fetch the PR comments directly, which is more reliable and up-to-date
+      const prNumber = prInfo.number;
+      const description = `Read the review requests on PR #${prNumber} and address any feedback the best you can.`;
+
+      const featureData = {
+        title: `Address PR #${prNumber} Review Comments`,
+        category: 'PR Review',
+        description,
+        images: [],
+        imagePaths: [],
+        skipTests: defaultSkipTests,
+        model: 'opus' as const,
+        thinkingLevel: 'none' as const,
+        branchName: worktree.branch,
+        workMode: 'custom' as const, // Use the worktree's branch
+        priority: 1, // High priority for PR feedback
+        planningMode: 'skip' as const,
+        requirePlanApproval: false,
+      };
+
+      await handleAddAndStartFeature(featureData);
+    },
+    [handleAddAndStartFeature, defaultSkipTests]
+  );
+
+  // Handler for resolving conflicts - opens dialog to select remote branch, then creates a feature
+  const handleResolveConflicts = useCallback((worktree: WorktreeInfo) => {
+    setSelectedWorktreeForAction(worktree);
+    setShowMergeRebaseDialog(true);
+  }, []);
+
+  // Handler called when merge/rebase fails due to conflicts and user wants to create a feature to resolve them
+  const handleCreateMergeConflictResolutionFeature = useCallback(
+    async (conflictInfo: MergeConflictInfo) => {
+      const isRebase = conflictInfo.operationType === 'rebase';
+      const isCherryPick = conflictInfo.operationType === 'cherry-pick';
+      const conflictFilesInfo =
+        conflictInfo.conflictFiles && conflictInfo.conflictFiles.length > 0
+          ? `\n\nConflicting files:\n${conflictInfo.conflictFiles.map((f) => `- ${f}`).join('\n')}`
+          : '';
+
+      let description: string;
+      let title: string;
+
+      if (isRebase) {
+        description = `Fetch the latest changes from ${conflictInfo.sourceBranch} and rebase the current branch (${conflictInfo.targetBranch}) onto ${conflictInfo.sourceBranch}. Use "git fetch" followed by "git rebase ${conflictInfo.sourceBranch}" to replay commits on top of the remote branch for a linear history. If rebase conflicts arise, resolve them one commit at a time using "git rebase --continue" after fixing each conflict. After completing the rebase, ensure the code compiles and tests pass.${conflictFilesInfo}`;
+        title = `Rebase & Resolve Conflicts: ${conflictInfo.targetBranch} onto ${conflictInfo.sourceBranch}`;
+      } else if (isCherryPick) {
+        description = `Resolve cherry-pick conflicts when cherry-picking commits from "${conflictInfo.sourceBranch}" into "${conflictInfo.targetBranch}". The cherry-pick was attempted but encountered conflicts that need to be resolved manually. Cherry-pick the commits again using "git cherry-pick <commit-hashes>", resolve any conflicts, then use "git cherry-pick --continue" after fixing each conflict. After completing the cherry-pick, ensure the code compiles and tests pass.${conflictFilesInfo}`;
+        title = `Resolve Cherry-Pick Conflicts: ${conflictInfo.sourceBranch} → ${conflictInfo.targetBranch}`;
+      } else {
+        description = `Resolve merge conflicts when merging "${conflictInfo.sourceBranch}" into "${conflictInfo.targetBranch}". The merge was started but encountered conflicts that need to be resolved manually. After resolving all conflicts, ensure the code compiles and tests pass, then complete the merge by committing the resolved changes.${conflictFilesInfo}`;
+        title = `Resolve Merge Conflicts: ${conflictInfo.sourceBranch} → ${conflictInfo.targetBranch}`;
+      }
+
+      const featureData = {
+        title,
+        category: 'Maintenance',
+        description,
+        images: [],
+        imagePaths: [],
+        skipTests: defaultSkipTests,
+        model: 'opus' as const,
+        thinkingLevel: 'none' as const,
+        branchName: conflictInfo.targetBranch,
+        workMode: 'custom' as const, // Use the target branch where conflicts need to be resolved
+        priority: 1, // High priority for conflict resolution
+        planningMode: 'skip' as const,
+        requirePlanApproval: false,
+      };
+
+      await handleAddAndStartFeature(featureData);
+    },
+    [handleAddAndStartFeature, defaultSkipTests]
+  );
+
+  // Handler called when branch switch stash reapply causes merge conflicts.
+  // Shows a dialog to let the user choose between manual or AI resolution.
+  const handleBranchSwitchConflict = useCallback((conflictInfo: BranchSwitchConflictInfo) => {
+    setBranchConflictData({ type: 'branch-switch', info: conflictInfo });
+    setShowBranchConflictDialog(true);
+  }, []);
+
+  // Handler called when checkout fails AND the stash-pop restoration produces merge conflicts.
+  // Shows a dialog to let the user choose between manual or AI resolution.
+  const handleStashPopConflict = useCallback((conflictInfo: StashPopConflictInfo) => {
+    setBranchConflictData({ type: 'stash-pop', info: conflictInfo });
+    setShowBranchConflictDialog(true);
+  }, []);
+
+  // Handler called when the user selects "Resolve with AI" from the branch conflict dialog.
+  // Creates and starts the AI-assisted conflict resolution feature task.
+  const handleBranchConflictResolveWithAI = useCallback(
+    async (conflictData: BranchConflictData) => {
+      if (conflictData.type === 'branch-switch') {
+        const conflictInfo = conflictData.info;
+        const description = `Resolve merge conflicts that occurred when switching from "${conflictInfo.previousBranch}" to "${conflictInfo.branchName}". Local changes were stashed before switching and reapplying them caused conflicts. Please resolve all merge conflicts, ensure the code compiles and tests pass.`;
+
+        const featureData = {
+          title: `Resolve Stash Conflicts: switch to ${conflictInfo.branchName}`,
+          category: 'Maintenance',
+          description,
+          images: [],
+          imagePaths: [],
+          skipTests: defaultSkipTests,
+          model: resolveModelString('opus'),
+          thinkingLevel: 'none' as const,
+          branchName: conflictInfo.branchName,
+          workMode: 'custom' as const,
+          priority: 1,
+          planningMode: 'skip' as const,
+          requirePlanApproval: false,
+        };
+
+        await handleAddAndStartFeature(featureData);
+      } else {
+        const conflictInfo = conflictData.info;
+        const description =
+          `Resolve merge conflicts that occurred when attempting to switch to branch "${conflictInfo.branchName}". ` +
+          `The checkout failed and, while restoring the previously stashed local changes, git reported merge conflicts. ` +
+          `${conflictInfo.stashPopConflictMessage} ` +
+          `Please review all conflicted files, resolve the conflicts, ensure the code compiles and tests pass, ` +
+          `then re-attempt the branch switch.`;
+
+        const featureData = {
+          title: `Resolve Stash-Pop Conflicts: branch switch to ${conflictInfo.branchName}`,
+          category: 'Maintenance',
+          description,
+          images: [],
+          imagePaths: [],
+          skipTests: defaultSkipTests,
+          model: resolveModelString('opus'),
+          thinkingLevel: 'none' as const,
+          branchName: conflictInfo.branchName,
+          workMode: 'custom' as const,
+          priority: 1,
+          planningMode: 'skip' as const,
+          requirePlanApproval: false,
+        };
+
+        await handleAddAndStartFeature(featureData);
+      }
+    },
+    [handleAddAndStartFeature, defaultSkipTests]
+  );
+
+  // Handler called when stash apply/pop results in merge conflicts and user wants AI resolution
+  const handleStashApplyConflict = useCallback(
+    async (conflictInfo: StashApplyConflictInfo) => {
+      const operationLabel = conflictInfo.operation === 'pop' ? 'popping' : 'applying';
+      const conflictFilesList =
+        conflictInfo.conflictFiles.length > 0
+          ? `\n\nConflicted files:\n${conflictInfo.conflictFiles.map((f) => `- ${f}`).join('\n')}`
+          : '';
+
+      const description =
+        `Resolve merge conflicts that occurred when ${operationLabel} stash "${conflictInfo.stashRef}" ` +
+        `on branch "${conflictInfo.branchName}". ` +
+        `The stash was ${conflictInfo.operation === 'pop' ? 'popped' : 'applied'} but resulted in merge conflicts ` +
+        `that need to be resolved. Please review all conflicted files, resolve the conflicts, ` +
+        `ensure the code compiles and tests pass, then commit the resolved changes.` +
+        conflictFilesList;
+
+      const featureData = {
+        title: `Resolve Stash Apply Conflicts: ${conflictInfo.stashRef} on ${conflictInfo.branchName}`,
+        category: 'Maintenance',
+        description,
+        images: [],
+        imagePaths: [],
+        skipTests: defaultSkipTests,
+        model: resolveModelString('opus'),
+        thinkingLevel: 'none' as const,
+        branchName: conflictInfo.branchName,
+        workMode: 'custom' as const,
+        priority: 1, // High priority for conflict resolution
+        planningMode: 'skip' as const,
+        requirePlanApproval: false,
+      };
+
+      await handleAddAndStartFeature(featureData);
+    },
+    [handleAddAndStartFeature, defaultSkipTests]
   );
 
   // NOTE: Auto mode polling loop has been moved to the backend.
@@ -1454,6 +1501,9 @@ export function BoardView() {
             onAddressPRComments={handleAddressPRComments}
             onResolveConflicts={handleResolveConflicts}
             onCreateMergeConflictResolutionFeature={handleCreateMergeConflictResolutionFeature}
+            onBranchSwitchConflict={handleBranchSwitchConflict}
+            onStashPopConflict={handleStashPopConflict}
+            onStashApplyConflict={handleStashApplyConflict}
             onBranchDeletedDuringMerge={(branchName) => {
               // Reset features that were assigned to the deleted branch (same logic as onDeleted in DeleteWorktreeDialog)
               hookFeatures.forEach((feature) => {
@@ -1506,6 +1556,7 @@ export function BoardView() {
                 },
                 onDuplicate: (feature) => handleDuplicateFeature(feature, false),
                 onDuplicateAsChild: (feature) => handleDuplicateFeature(feature, true),
+                onDuplicateAsChildMultiple: (feature) => setDuplicateMultipleFeature(feature),
               }}
               runningAutoTasks={runningAutoTasksAllWorktrees}
               pipelineConfig={pipelineConfig}
@@ -1547,6 +1598,7 @@ export function BoardView() {
               }}
               onDuplicate={(feature) => handleDuplicateFeature(feature, false)}
               onDuplicateAsChild={(feature) => handleDuplicateFeature(feature, true)}
+              onDuplicateAsChildMultiple={(feature) => setDuplicateMultipleFeature(feature)}
               featuresWithContext={featuresWithContext}
               runningAutoTasks={runningAutoTasksAllWorktrees}
               onArchiveAllVerified={() => setShowArchiveAllVerifiedDialog(true)}
@@ -1696,6 +1748,21 @@ export function BoardView() {
         branchName={outputFeature?.branchName}
       />
 
+      {/* Duplicate as Child Multiple Times Dialog */}
+      <DuplicateCountDialog
+        open={duplicateMultipleFeature !== null}
+        onOpenChange={(open) => {
+          if (!open) setDuplicateMultipleFeature(null);
+        }}
+        onConfirm={async (count) => {
+          if (duplicateMultipleFeature) {
+            await handleDuplicateAsChildMultiple(duplicateMultipleFeature, count);
+            setDuplicateMultipleFeature(null);
+          }
+        }}
+        featureTitle={duplicateMultipleFeature?.title || duplicateMultipleFeature?.description}
+      />
+
       {/* Archive All Verified Dialog */}
       <ArchiveAllVerifiedDialog
         open={showArchiveAllVerifiedDialog}
@@ -1843,12 +1910,20 @@ export function BoardView() {
         }}
       />
 
-      {/* Pull & Resolve Conflicts Dialog */}
-      <PullResolveConflictsDialog
-        open={showPullResolveConflictsDialog}
-        onOpenChange={setShowPullResolveConflictsDialog}
+      {/* Merge & Rebase Dialog */}
+      <MergeRebaseDialog
+        open={showMergeRebaseDialog}
+        onOpenChange={setShowMergeRebaseDialog}
         worktree={selectedWorktreeForAction}
-        onConfirm={handleConfirmResolveConflicts}
+        onCreateConflictResolutionFeature={handleCreateMergeConflictResolutionFeature}
+      />
+
+      {/* Branch Switch / Stash Pop Conflict Dialog */}
+      <BranchConflictDialog
+        open={showBranchConflictDialog}
+        onOpenChange={setShowBranchConflictDialog}
+        conflictData={branchConflictData}
+        onResolveWithAI={handleBranchConflictResolveWithAI}
       />
 
       {/* Commit Worktree Dialog */}

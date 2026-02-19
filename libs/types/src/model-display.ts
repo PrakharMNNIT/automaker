@@ -81,6 +81,14 @@ export const CODEX_MODELS: (ModelOption & { hasReasoning?: boolean })[] = [
     hasReasoning: true,
   },
   {
+    id: CODEX_MODEL_MAP.gpt53CodexSpark,
+    label: 'GPT-5.3-Codex-Spark',
+    description: 'Near-instant real-time coding model, 1000+ tokens/sec.',
+    badge: 'Speed',
+    provider: 'codex',
+    hasReasoning: true,
+  },
+  {
     id: CODEX_MODEL_MAP.gpt52Codex,
     label: 'GPT-5.2-Codex',
     description: 'Frontier agentic coding model.',
@@ -105,6 +113,30 @@ export const CODEX_MODELS: (ModelOption & { hasReasoning?: boolean })[] = [
     hasReasoning: false,
   },
   {
+    id: CODEX_MODEL_MAP.gpt51Codex,
+    label: 'GPT-5.1-Codex',
+    description: 'Original GPT-5.1 Codex agentic coding model.',
+    badge: 'Balanced',
+    provider: 'codex',
+    hasReasoning: true,
+  },
+  {
+    id: CODEX_MODEL_MAP.gpt5Codex,
+    label: 'GPT-5-Codex',
+    description: 'Original GPT-5 Codex model.',
+    badge: 'Balanced',
+    provider: 'codex',
+    hasReasoning: true,
+  },
+  {
+    id: CODEX_MODEL_MAP.gpt5CodexMini,
+    label: 'GPT-5-Codex-Mini',
+    description: 'Smaller, cheaper GPT-5 Codex variant.',
+    badge: 'Speed',
+    provider: 'codex',
+    hasReasoning: false,
+  },
+  {
     id: CODEX_MODEL_MAP.gpt52,
     label: 'GPT-5.2',
     description: 'Latest frontier model with improvements across knowledge, reasoning and coding.',
@@ -116,6 +148,14 @@ export const CODEX_MODELS: (ModelOption & { hasReasoning?: boolean })[] = [
     id: CODEX_MODEL_MAP.gpt51,
     label: 'GPT-5.1',
     description: 'Great for coding and agentic tasks across domains.',
+    badge: 'Balanced',
+    provider: 'codex',
+    hasReasoning: true,
+  },
+  {
+    id: CODEX_MODEL_MAP.gpt5,
+    label: 'GPT-5',
+    description: 'Base GPT-5 model.',
     badge: 'Balanced',
     provider: 'codex',
     hasReasoning: true,
@@ -213,7 +253,7 @@ export const REASONING_EFFORT_LABELS: Record<ReasoningEffort, string> = {
  * ```typescript
  * getModelDisplayName("haiku");  // "Claude Haiku"
  * getModelDisplayName("sonnet"); // "Claude Sonnet"
- * getModelDisplayName("claude-opus-4-20250514"); // "claude-opus-4-20250514"
+ * getModelDisplayName("claude-sonnet-4-6"); // "Claude Sonnet 4.6"
  * ```
  */
 export function getModelDisplayName(model: ModelAlias | string): string {
@@ -221,12 +261,22 @@ export function getModelDisplayName(model: ModelAlias | string): string {
     haiku: 'Claude Haiku',
     sonnet: 'Claude Sonnet',
     opus: 'Claude Opus',
+    'claude-haiku': 'Claude Haiku',
+    'claude-sonnet': 'Claude Sonnet',
+    'claude-opus': 'Claude Opus',
+    'claude-sonnet-4-6': 'Claude Sonnet 4.6',
+    'claude-opus-4-6': 'Claude Opus 4.6',
     [CODEX_MODEL_MAP.gpt53Codex]: 'GPT-5.3-Codex',
+    [CODEX_MODEL_MAP.gpt53CodexSpark]: 'GPT-5.3-Codex-Spark',
     [CODEX_MODEL_MAP.gpt52Codex]: 'GPT-5.2-Codex',
     [CODEX_MODEL_MAP.gpt51CodexMax]: 'GPT-5.1-Codex-Max',
     [CODEX_MODEL_MAP.gpt51CodexMini]: 'GPT-5.1-Codex-Mini',
+    [CODEX_MODEL_MAP.gpt51Codex]: 'GPT-5.1-Codex',
+    [CODEX_MODEL_MAP.gpt5Codex]: 'GPT-5-Codex',
+    [CODEX_MODEL_MAP.gpt5CodexMini]: 'GPT-5-Codex-Mini',
     [CODEX_MODEL_MAP.gpt52]: 'GPT-5.2',
     [CODEX_MODEL_MAP.gpt51]: 'GPT-5.1',
+    [CODEX_MODEL_MAP.gpt5]: 'GPT-5',
   };
 
   // Check direct match first

@@ -30,7 +30,6 @@ import type {
   ModelDefinition,
 } from './types.js';
 import {
-  CODEX_MODEL_MAP,
   supportsReasoningEffort,
   validateBareModelId,
   calculateReasoningTimeout,
@@ -56,15 +55,10 @@ const CODEX_EXEC_SUBCOMMAND = 'exec';
 const CODEX_JSON_FLAG = '--json';
 const CODEX_MODEL_FLAG = '--model';
 const CODEX_VERSION_FLAG = '--version';
-const CODEX_SANDBOX_FLAG = '--sandbox';
-const CODEX_APPROVAL_FLAG = '--ask-for-approval';
-const CODEX_SEARCH_FLAG = '--search';
-const CODEX_OUTPUT_SCHEMA_FLAG = '--output-schema';
 const CODEX_CONFIG_FLAG = '--config';
-const CODEX_IMAGE_FLAG = '--image';
 const CODEX_ADD_DIR_FLAG = '--add-dir';
+const CODEX_OUTPUT_SCHEMA_FLAG = '--output-schema';
 const CODEX_SKIP_GIT_REPO_CHECK_FLAG = '--skip-git-repo-check';
-const CODEX_RESUME_FLAG = 'resume';
 const CODEX_REASONING_EFFORT_KEY = 'reasoning_effort';
 const CODEX_YOLO_FLAG = '--dangerously-bypass-approvals-and-sandbox';
 const OPENAI_API_KEY_ENV = 'OPENAI_API_KEY';
@@ -106,9 +100,6 @@ const TEXT_ENCODING = 'utf-8';
  */
 const CODEX_CLI_TIMEOUT_MS = DEFAULT_TIMEOUT_MS;
 const CODEX_FEATURE_GENERATION_BASE_TIMEOUT_MS = 300000; // 5 minutes for feature generation
-const CONTEXT_WINDOW_256K = 256000;
-const MAX_OUTPUT_32K = 32000;
-const MAX_OUTPUT_16K = 16000;
 const SYSTEM_PROMPT_SEPARATOR = '\n\n';
 const CODEX_INSTRUCTIONS_DIR = '.codex';
 const CODEX_INSTRUCTIONS_SECTION = 'Codex Project Instructions';
@@ -210,18 +201,54 @@ function isSdkEligible(options: ExecuteOptions): boolean {
   return isNoToolsRequested(options) && !hasMcpServersConfigured(options);
 }
 
+function isSdkEligibleWithApiKey(options: ExecuteOptions): boolean {
+  // When using an API key (not CLI OAuth), prefer SDK over CLI to avoid OAuth issues.
+  // SDK mode is used when MCP servers are not configured (MCP requires CLI).
+  // Tool requests are handled by the SDK, so we allow SDK mode even with tools.
+  return !hasMcpServersConfigured(options);
+}
+
 async function resolveCodexExecutionPlan(options: ExecuteOptions): Promise<CodexExecutionPlan> {
   const cliPath = await findCodexCliPath();
   const authIndicators = await getCodexAuthIndicators();
   const openAiApiKey = await resolveOpenAiApiKey();
   const hasApiKey = Boolean(openAiApiKey);
-  const cliAuthenticated = authIndicators.hasOAuthToken || authIndicators.hasApiKey || hasApiKey;
-  const sdkEligible = isSdkEligible(options);
   const cliAvailable = Boolean(cliPath);
+  // CLI OAuth login takes priority: if the user has logged in via `codex login`,
+  // use the CLI regardless of whether an API key is also stored.
+  // hasOAuthToken = OAuth session from `codex login`
+  // authIndicators.hasApiKey = API key stored in Codex's own auth file (via `codex login --api-key`)
+  // Both are "CLI-native" auth — distinct from an API key stored in Automaker's credentials.
+  const hasCliNativeAuth = authIndicators.hasOAuthToken || authIndicators.hasApiKey;
+  const sdkEligible = isSdkEligible(options);
 
-  if (hasApiKey) {
+  // If CLI is available and the user authenticated via the CLI (`codex login`),
+  // prefer CLI mode over SDK. This ensures `codex login` sessions take priority
+  // over API keys stored in Automaker's credentials.
+  if (cliAvailable && hasCliNativeAuth) {
+    return {
+      mode: CODEX_EXECUTION_MODE_CLI,
+      cliPath,
+      openAiApiKey,
+    };
+  }
+
+  // No CLI-native auth — prefer SDK when an API key is available.
+  // Using SDK with an API key avoids OAuth issues that can arise with the CLI.
+  // MCP servers still require CLI mode since the SDK doesn't support MCP.
+  if (hasApiKey && isSdkEligibleWithApiKey(options)) {
     return {
       mode: CODEX_EXECUTION_MODE_SDK,
+      cliPath,
+      openAiApiKey,
+    };
+  }
+
+  // MCP servers are requested with an API key but no CLI-native auth — use CLI mode
+  // with the API key passed as an environment variable.
+  if (hasApiKey && cliAvailable) {
+    return {
+      mode: CODEX_EXECUTION_MODE_CLI,
       cliPath,
       openAiApiKey,
     };
@@ -237,15 +264,9 @@ async function resolveCodexExecutionPlan(options: ExecuteOptions): Promise<Codex
     throw new Error(ERROR_CODEX_CLI_REQUIRED);
   }
 
-  if (!cliAuthenticated) {
-    throw new Error(ERROR_CODEX_AUTH_REQUIRED);
-  }
-
-  return {
-    mode: CODEX_EXECUTION_MODE_CLI,
-    cliPath,
-    openAiApiKey,
-  };
+  // At this point, neither hasCliNativeAuth nor hasApiKey is true,
+  // so authentication is required regardless.
+  throw new Error(ERROR_CODEX_AUTH_REQUIRED);
 }
 
 function getEventType(event: Record<string, unknown>): string | null {
@@ -758,15 +779,12 @@ export class CodexProvider extends BaseProvider {
         options.cwd,
         codexSettings.sandboxMode !== 'danger-full-access'
       );
-      const resolvedSandboxMode = sandboxCheck.enabled
-        ? codexSettings.sandboxMode
-        : 'danger-full-access';
       if (!sandboxCheck.enabled && sandboxCheck.message) {
         console.warn(`[CodexProvider] ${sandboxCheck.message}`);
       }
       const searchEnabled =
         codexSettings.enableWebSearch || resolveSearchEnabled(resolvedAllowedTools, restrictTools);
-      const outputSchemaPath = await writeOutputSchemaFile(options.cwd, options.outputFormat);
+      const schemaPath = await writeOutputSchemaFile(options.cwd, options.outputFormat);
       const imageBlocks = codexSettings.enableImages ? extractImageBlocks(options.prompt) : [];
       const imagePaths = await writeImageFiles(options.cwd, imageBlocks);
       const approvalPolicy =
@@ -801,7 +819,7 @@ export class CodexProvider extends BaseProvider {
         overrides.push({ key: 'features.web_search_request', value: true });
       }
 
-      const configOverrides = buildConfigOverrides(overrides);
+      const configOverrideArgs = buildConfigOverrides(overrides);
       const preExecArgs: string[] = [];
 
       // Add additional directories with write access
@@ -809,6 +827,12 @@ export class CodexProvider extends BaseProvider {
         for (const dir of codexSettings.additionalDirs) {
           preExecArgs.push(CODEX_ADD_DIR_FLAG, dir);
         }
+      }
+
+      // If images were written to disk, add the image directory so the CLI can access them
+      if (imagePaths.length > 0) {
+        const imageDir = path.join(options.cwd, CODEX_INSTRUCTIONS_DIR, IMAGE_TEMP_DIR);
+        preExecArgs.push(CODEX_ADD_DIR_FLAG, imageDir);
       }
 
       // Model is already bare (no prefix) - validated by executeQuery
@@ -820,6 +844,8 @@ export class CodexProvider extends BaseProvider {
         CODEX_MODEL_FLAG,
         options.model,
         CODEX_JSON_FLAG,
+        ...configOverrideArgs,
+        ...(schemaPath ? [CODEX_OUTPUT_SCHEMA_FLAG, schemaPath] : []),
         '-', // Read prompt from stdin to avoid shell escaping issues
       ];
 
@@ -866,16 +892,36 @@ export class CodexProvider extends BaseProvider {
 
           // Enhance error message with helpful context
           let enhancedError = errorText;
-          if (errorText.toLowerCase().includes('rate limit')) {
+          const errorLower = errorText.toLowerCase();
+          if (errorLower.includes('rate limit')) {
             enhancedError = `${errorText}\n\nTip: You're being rate limited. Try reducing concurrent tasks or waiting a few minutes before retrying.`;
+          } else if (errorLower.includes('authentication') || errorLower.includes('unauthorized')) {
+            enhancedError = `${errorText}\n\nTip: Check that your OPENAI_API_KEY is set correctly or run 'codex login' to authenticate.`;
           } else if (
-            errorText.toLowerCase().includes('authentication') ||
-            errorText.toLowerCase().includes('unauthorized')
+            errorLower.includes('model does not exist') ||
+            errorLower.includes('requested model does not exist') ||
+            errorLower.includes('do not have access') ||
+            errorLower.includes('model_not_found') ||
+            errorLower.includes('invalid_model')
           ) {
-            enhancedError = `${errorText}\n\nTip: Check that your OPENAI_API_KEY is set correctly or run 'codex auth login' to authenticate.`;
+            enhancedError =
+              `${errorText}\n\nTip: The model '${options.model}' may not be available on your OpenAI plan. ` +
+              `See https://platform.openai.com/docs/models for available models. ` +
+              `Some models require a ChatGPT Pro/Plus subscription—authenticate with 'codex login' instead of an API key.`;
           } else if (
-            errorText.toLowerCase().includes('not found') ||
-            errorText.toLowerCase().includes('command not found')
+            errorLower.includes('stream disconnected') ||
+            errorLower.includes('stream ended') ||
+            errorLower.includes('connection reset')
+          ) {
+            enhancedError =
+              `${errorText}\n\nTip: The connection to OpenAI was interrupted. This can happen due to:\n` +
+              `- Network instability\n` +
+              `- The model not being available on your plan\n` +
+              `- Server-side timeouts for long-running requests\n` +
+              `Try again, or switch to a different model.`;
+          } else if (
+            errorLower.includes('command not found') ||
+            errorLower.includes('is not recognized as an internal or external command')
           ) {
             enhancedError = `${errorText}\n\nTip: Make sure the Codex CLI is installed. Run 'npm install -g @openai/codex-cli' to install.`;
           }
@@ -1033,7 +1079,6 @@ export class CodexProvider extends BaseProvider {
   async detectInstallation(): Promise<InstallationStatus> {
     const cliPath = await findCodexCliPath();
     const hasApiKey = Boolean(await resolveOpenAiApiKey());
-    const authIndicators = await getCodexAuthIndicators();
     const installed = !!cliPath;
 
     let version = '';
@@ -1045,7 +1090,7 @@ export class CodexProvider extends BaseProvider {
           cwd: process.cwd(),
         });
         version = result.stdout.trim();
-      } catch (error) {
+      } catch {
         version = '';
       }
     }

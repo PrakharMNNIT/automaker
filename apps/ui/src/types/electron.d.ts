@@ -2,7 +2,12 @@
  * Electron API type definitions
  */
 
-import type { ClaudeUsageResponse, CodexUsageResponse } from '@/store/app-store';
+import type {
+  ClaudeUsageResponse,
+  CodexUsageResponse,
+  ZaiUsageResponse,
+  GeminiUsageResponse,
+} from '@/store/app-store';
 import type { ParsedTask, FeatureStatusWithPipeline } from '@automaker/types';
 
 export interface ImageAttachment {
@@ -710,6 +715,16 @@ export interface ElectronAPI {
     getUsage: () => Promise<CodexUsageResponse>;
   };
 
+  // z.ai Usage API
+  zai: {
+    getUsage: () => Promise<ZaiUsageResponse>;
+  };
+
+  // Gemini Usage API
+  gemini: {
+    getUsage: () => Promise<GeminiUsageResponse>;
+  };
+
   // Worktree Management APIs
   worktree: WorktreeAPI;
 
@@ -740,6 +755,10 @@ export interface FileStatus {
   status: string;
   path: string;
   statusText: string;
+  /** Raw staging area (index) status character from git porcelain format */
+  indexStatus?: string;
+  /** Raw working tree status character from git porcelain format */
+  workTreeStatus?: string;
 }
 
 export interface FileDiffsResult {
@@ -778,6 +797,25 @@ export interface WorktreeAPI {
       branchDeleted: boolean;
     };
     error?: string;
+    hasConflicts?: boolean;
+    conflictFiles?: string[];
+  }>;
+
+  // Rebase the current branch onto a target branch
+  rebase: (
+    worktreePath: string,
+    ontoBranch: string
+  ) => Promise<{
+    success: boolean;
+    result?: {
+      branch: string;
+      ontoBranch: string;
+      message: string;
+    };
+    error?: string;
+    hasConflicts?: boolean;
+    conflictFiles?: string[];
+    aborted?: boolean;
   }>;
 
   // Get worktree info for a feature
@@ -864,7 +902,8 @@ export interface WorktreeAPI {
   // Commit changes in a worktree
   commit: (
     worktreePath: string,
-    message: string
+    message: string,
+    files?: string[]
   ) => Promise<{
     success: boolean;
     result?: {
@@ -880,6 +919,17 @@ export interface WorktreeAPI {
   generateCommitMessage: (worktreePath: string) => Promise<{
     success: boolean;
     message?: string;
+    error?: string;
+  }>;
+
+  // Generate an AI PR title and description from branch diff
+  generatePRDescription: (
+    worktreePath: string,
+    baseBranch?: string
+  ) => Promise<{
+    success: boolean;
+    title?: string;
+    body?: string;
     error?: string;
   }>;
 
@@ -909,6 +959,7 @@ export interface WorktreeAPI {
       prBody?: string;
       baseBranch?: string;
       draft?: boolean;
+      remote?: string;
     }
   ) => Promise<{
     success: boolean;
@@ -938,31 +989,76 @@ export interface WorktreeAPI {
     filePath: string
   ) => Promise<FileDiffResult>;
 
-  // Pull latest changes from remote
-  pull: (worktreePath: string) => Promise<{
+  // Stage or unstage files in a worktree
+  stageFiles: (
+    worktreePath: string,
+    files: string[],
+    operation: 'stage' | 'unstage'
+  ) => Promise<{
+    success: boolean;
+    result?: {
+      operation: 'stage' | 'unstage';
+      filesCount: number;
+    };
+    error?: string;
+  }>;
+
+  // Pull latest changes from remote with optional stash management
+  pull: (
+    worktreePath: string,
+    remote?: string,
+    stashIfNeeded?: boolean
+  ) => Promise<{
     success: boolean;
     result?: {
       branch: string;
       pulled: boolean;
       message: string;
+      hasLocalChanges?: boolean;
+      localChangedFiles?: string[];
+      hasConflicts?: boolean;
+      conflictSource?: 'pull' | 'stash';
+      conflictFiles?: string[];
+      stashed?: boolean;
+      stashRestored?: boolean;
     };
     error?: string;
     code?: 'NOT_GIT_REPO' | 'NO_COMMITS';
   }>;
 
-  // Create and checkout a new branch
+  // Check for uncommitted changes in a worktree
+  checkChanges: (worktreePath: string) => Promise<{
+    success: boolean;
+    result?: {
+      hasChanges: boolean;
+      staged: string[];
+      unstaged: string[];
+      untracked: string[];
+      totalFiles: number;
+    };
+    error?: string;
+  }>;
+
+  // Create and checkout a new branch (with optional stash handling)
   checkoutBranch: (
     worktreePath: string,
-    branchName: string
+    branchName: string,
+    baseBranch?: string,
+    stashChanges?: boolean,
+    includeUntracked?: boolean
   ) => Promise<{
     success: boolean;
     result?: {
       previousBranch: string;
       newBranch: string;
       message: string;
+      hasConflicts?: boolean;
+      stashedChanges?: boolean;
     };
     error?: string;
     code?: 'NOT_GIT_REPO' | 'NO_COMMITS';
+    stashPopConflicts?: boolean;
+    stashPopConflictMessage?: string;
   }>;
 
   // List branches (local and optionally remote)
@@ -997,9 +1093,15 @@ export interface WorktreeAPI {
       previousBranch: string;
       currentBranch: string;
       message: string;
+      hasConflicts: boolean;
+      stashedChanges: boolean;
     };
     error?: string;
     code?: 'NOT_GIT_REPO' | 'NO_COMMITS' | 'UNCOMMITTED_CHANGES';
+    /** True when the checkout failed AND the stash-pop used to restore changes produced merge conflicts */
+    stashPopConflicts?: boolean;
+    /** Human-readable message describing the stash-pop conflict situation */
+    stashPopConflictMessage?: string;
   }>;
 
   // List all remotes and their branches
@@ -1303,8 +1405,11 @@ export interface WorktreeAPI {
     }) => void
   ) => () => void;
 
-  // Discard changes for a worktree
-  discardChanges: (worktreePath: string) => Promise<{
+  // Discard changes for a worktree (optionally only specific files)
+  discardChanges: (
+    worktreePath: string,
+    files?: string[]
+  ) => Promise<{
     success: boolean;
     result?: {
       discarded: boolean;
@@ -1384,6 +1489,156 @@ export interface WorktreeAPI {
           }
     ) => void
   ) => () => void;
+
+  // Get recent commit history for a worktree
+  getCommitLog: (
+    worktreePath: string,
+    limit?: number
+  ) => Promise<{
+    success: boolean;
+    result?: {
+      branch: string;
+      commits: Array<{
+        hash: string;
+        shortHash: string;
+        author: string;
+        authorEmail: string;
+        date: string;
+        subject: string;
+        body: string;
+        files: string[];
+      }>;
+      total: number;
+    };
+    error?: string;
+  }>;
+
+  // Stash changes in a worktree (with optional message and optional file selection)
+  stashPush: (
+    worktreePath: string,
+    message?: string,
+    files?: string[]
+  ) => Promise<{
+    success: boolean;
+    result?: {
+      stashed: boolean;
+      branch?: string;
+      message?: string;
+    };
+    error?: string;
+  }>;
+
+  // List all stashes in a worktree
+  stashList: (worktreePath: string) => Promise<{
+    success: boolean;
+    result?: {
+      stashes: Array<{
+        index: number;
+        message: string;
+        branch: string;
+        date: string;
+        files: string[];
+      }>;
+      total: number;
+    };
+    error?: string;
+  }>;
+
+  // Apply or pop a stash entry
+  stashApply: (
+    worktreePath: string,
+    stashIndex: number,
+    pop?: boolean
+  ) => Promise<{
+    success: boolean;
+    result?: {
+      applied: boolean;
+      hasConflicts: boolean;
+      conflictFiles?: string[];
+      operation: 'apply' | 'pop';
+      stashIndex: number;
+      message: string;
+    };
+    error?: string;
+  }>;
+
+  // Drop (delete) a stash entry
+  stashDrop: (
+    worktreePath: string,
+    stashIndex: number
+  ) => Promise<{
+    success: boolean;
+    result?: {
+      dropped: boolean;
+      stashIndex: number;
+      message: string;
+    };
+    error?: string;
+  }>;
+
+  // Cherry-pick one or more commits into the current branch
+  cherryPick: (
+    worktreePath: string,
+    commitHashes: string[],
+    options?: {
+      noCommit?: boolean;
+    }
+  ) => Promise<{
+    success: boolean;
+    result?: {
+      cherryPicked: boolean;
+      commitHashes: string[];
+      branch: string;
+      message: string;
+    };
+    error?: string;
+    hasConflicts?: boolean;
+    aborted?: boolean;
+  }>;
+
+  // Abort an in-progress merge, rebase, or cherry-pick operation
+  abortOperation: (worktreePath: string) => Promise<{
+    success: boolean;
+    result?: {
+      operation: string;
+      message: string;
+    };
+    error?: string;
+  }>;
+
+  // Continue an in-progress merge, rebase, or cherry-pick after conflict resolution
+  continueOperation: (worktreePath: string) => Promise<{
+    success: boolean;
+    result?: {
+      operation: string;
+      message: string;
+    };
+    error?: string;
+  }>;
+
+  // Get commit log for a specific branch (not just the current one)
+  getBranchCommitLog: (
+    worktreePath: string,
+    branchName?: string,
+    limit?: number
+  ) => Promise<{
+    success: boolean;
+    result?: {
+      branch: string;
+      commits: Array<{
+        hash: string;
+        shortHash: string;
+        author: string;
+        authorEmail: string;
+        date: string;
+        subject: string;
+        body: string;
+        files: string[];
+      }>;
+      total: number;
+    };
+    error?: string;
+  }>;
 }
 
 // Test runner status type
@@ -1424,6 +1679,20 @@ export interface GitAPI {
 
   // Get diff for a specific file in the main project
   getFileDiff: (projectPath: string, filePath: string) => Promise<FileDiffResult>;
+
+  // Stage or unstage files in the main project
+  stageFiles: (
+    projectPath: string,
+    files: string[],
+    operation: 'stage' | 'unstage'
+  ) => Promise<{
+    success: boolean;
+    result?: {
+      operation: 'stage' | 'unstage';
+      filesCount: number;
+    };
+    error?: string;
+  }>;
 }
 
 // Model definition type
