@@ -658,7 +658,11 @@ export function GitDiffPanel({
   }, [worktreePath, projectPath, useWorktrees, enableStaging, files, executeStagingAction]);
 
   const handleUnstageAll = useCallback(async () => {
-    const allPaths = files.map((f) => f.path);
+    const stagedFiles = files.filter((f) => {
+      const state = getStagingState(f);
+      return state === 'staged' || state === 'partial';
+    });
+    const allPaths = stagedFiles.map((f) => f.path);
     if (allPaths.length === 0) return;
     if (enableStaging && useWorktrees && !worktreePath) {
       toast.error('Failed to unstage all files', {

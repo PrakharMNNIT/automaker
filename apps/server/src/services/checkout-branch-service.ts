@@ -296,6 +296,10 @@ export async function performCheckoutBranch(
       branchName,
       error: checkoutErrorMsg,
     });
-    throw checkoutError;
+    return {
+      success: false,
+      error: checkoutErrorMsg,
+      stashPopConflicts: false,
+    };
   }
 }

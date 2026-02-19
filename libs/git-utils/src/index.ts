@@ -23,3 +23,6 @@ export {
 
 // Export conflict utilities
 export { getConflictFiles } from './conflict.js';
+
+// Export branch utilities
+export { getCurrentBranch } from './branch.js';

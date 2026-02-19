@@ -16,8 +16,8 @@
  */
 
 import { createLogger, getErrorMessage } from '@automaker/utils';
-import { getConflictFiles } from '@automaker/git-utils';
-import { execGitCommand, execGitCommandWithLockRetry, getCurrentBranch } from '../lib/git.js';
+import { execGitCommand, getConflictFiles } from '@automaker/git-utils';
+import { execGitCommandWithLockRetry, getCurrentBranch } from '../lib/git.js';
 
 const logger = createLogger('PullService');
 
@@ -359,7 +359,7 @@ export async function performPull(
   // 9. If pull had conflicts, return conflict info (don't try stash pop)
   if (pullConflict) {
     return {
-      success: true,
+      success: false,
       branch: branchName,
       pulled: true,
       hasConflicts: true,

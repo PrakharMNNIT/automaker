@@ -8,8 +8,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { createLogger, getErrorMessage } from '@automaker/utils';
-import { getConflictFiles } from '@automaker/git-utils';
-import { execGitCommand, getCurrentBranch } from '../lib/git.js';
+import { execGitCommand, getCurrentBranch, getConflictFiles } from '@automaker/git-utils';
 
 const logger = createLogger('RebaseService');
 
@@ -64,13 +63,13 @@ export async function runRebase(worktreePath: string, ontoBranch: string): Promi
     // Pass ontoBranch after '--' so git treats it as a ref, not an option.
     // Set LC_ALL=C so git always emits English output regardless of the system
     // locale, making text-based conflict detection reliable.
-    await execGitCommand(['rebase', '--', ontoBranch], worktreePath, { LC_ALL: 'C' });
+    await execGitCommand(['rebase', '--', normalizedOntoBranch], worktreePath, { LC_ALL: 'C' });
 
     return {
       success: true,
       branch: currentBranch,
-      ontoBranch,
-      message: `Successfully rebased ${currentBranch} onto ${ontoBranch}`,
+      ontoBranch: normalizedOntoBranch,
+      message: `Successfully rebased ${currentBranch} onto ${normalizedOntoBranch}`,
     };
   } catch (rebaseError: unknown) {
     // Check if this is a rebase conflict.  We use a multi-layer strategy so
@@ -165,13 +164,13 @@ export async function runRebase(worktreePath: string, ontoBranch: string): Promi
       return {
         success: false,
         error: aborted
-          ? `Rebase of "${currentBranch}" onto "${ontoBranch}" aborted due to conflicts; no changes were applied.`
-          : `Rebase of "${currentBranch}" onto "${ontoBranch}" failed due to conflicts and the abort also failed; repository may be in a dirty state.`,
+          ? `Rebase of "${currentBranch}" onto "${normalizedOntoBranch}" aborted due to conflicts; no changes were applied.`
+          : `Rebase of "${currentBranch}" onto "${normalizedOntoBranch}" failed due to conflicts and the abort also failed; repository may be in a dirty state.`,
         hasConflicts: true,
         conflictFiles,
         aborted,
         branch: currentBranch,
-        ontoBranch,
+        ontoBranch: normalizedOntoBranch,
       };
     }
 

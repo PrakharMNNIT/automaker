@@ -15,7 +15,7 @@ import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import type { Feature, PlanningMode, ThinkingLevel } from '@automaker/types';
-import { DEFAULT_MAX_CONCURRENCY, stripProviderPrefix } from '@automaker/types';
+import { DEFAULT_MAX_CONCURRENCY, DEFAULT_MODELS, stripProviderPrefix } from '@automaker/types';
 import { resolveModelString } from '@automaker/model-resolver';
 import { createLogger, loadContextFiles, classifyError } from '@automaker/utils';
 import { getFeatureDir } from '@automaker/platform';
@@ -213,7 +213,7 @@ export class AutoModeServiceFacade {
           [key: string]: unknown;
         }
       ): Promise<void> => {
-        const resolvedModel = resolveModelString(model, 'claude-sonnet-4-6');
+        const resolvedModel = resolveModelString(model, DEFAULT_MODELS.claude);
         const provider = ProviderFactory.getProviderForModel(resolvedModel);
         const effectiveBareModel = stripProviderPrefix(resolvedModel);
 

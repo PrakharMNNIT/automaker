@@ -127,8 +127,8 @@ export async function popStash(
   cwd: string
 ): Promise<{ success: boolean; hasConflicts: boolean; error?: string }> {
   try {
-    await execGitCommand(['stash', 'pop'], cwd);
-    // If execGitCommand succeeds (zero exit code), there are no conflicts
+    await execGitCommandWithLockRetry(['stash', 'pop'], cwd);
+    // If execGitCommandWithLockRetry succeeds (zero exit code), there are no conflicts
     return { success: true, hasConflicts: false };
   } catch (error) {
     const errorMsg = getErrorMessage(error);
