@@ -4,7 +4,8 @@
  * This endpoint handles worktree creation with proper checks:
  * 1. First checks if git already has a worktree for the branch (anywhere)
  * 2. If found, returns the existing worktree (no error)
- * 3. Only creates a new worktree if none exists for the branch
+ * 3. Syncs the base branch from its remote tracking branch (fast-forward only)
+ * 4. Only creates a new worktree if none exists for the branch
  */
 
 import type { Request, Response } from 'express';
@@ -27,6 +28,10 @@ import { execGitCommand } from '../../../lib/git.js';
 import { trackBranch } from './branch-tracking.js';
 import { createLogger } from '@automaker/utils';
 import { runInitScript } from '../../../services/init-script-service.js';
+import {
+  syncBaseBranch,
+  type BaseBranchSyncResult,
+} from '../../../services/branch-sync-service.js';
 
 const logger = createLogger('Worktree');
 
@@ -193,6 +198,52 @@ export function createCreateHandler(events: EventEmitter, settingsService?: Sett
         logger.warn(`Failed to fetch from remotes: ${getErrorMessage(fetchErr)}`);
       }
 
+      // Sync the base branch with its remote tracking branch (fast-forward only).
+      // This ensures the new worktree starts from an up-to-date state rather than
+      // a potentially stale local copy. If the sync fails or the branch has diverged,
+      // we proceed with the local copy and inform the user.
+      const effectiveBase = baseBranch || 'HEAD';
+      let syncResult: BaseBranchSyncResult = { attempted: false, synced: false };
+
+      // Only sync if the base is a real branch (not 'HEAD')
+      // Pass skipFetch=true because we already fetched all remotes above.
+      if (effectiveBase !== 'HEAD') {
+        logger.info(`Syncing base branch '${effectiveBase}' before creating worktree`);
+        syncResult = await syncBaseBranch(projectPath, effectiveBase, true);
+        if (syncResult.attempted) {
+          if (syncResult.synced) {
+            logger.info(`Base branch sync result: ${syncResult.message}`);
+          } else {
+            logger.warn(`Base branch sync result: ${syncResult.message}`);
+          }
+        }
+      } else {
+        // When using HEAD, try to sync the currently checked-out branch
+        // Pass skipFetch=true because we already fetched all remotes above.
+        try {
+          const currentBranch = await execGitCommand(
+            ['rev-parse', '--abbrev-ref', 'HEAD'],
+            projectPath
+          );
+          const trimmedBranch = currentBranch.trim();
+          if (trimmedBranch && trimmedBranch !== 'HEAD') {
+            logger.info(
+              `Syncing current branch '${trimmedBranch}' (HEAD) before creating worktree`
+            );
+            syncResult = await syncBaseBranch(projectPath, trimmedBranch, true);
+            if (syncResult.attempted) {
+              if (syncResult.synced) {
+                logger.info(`HEAD branch sync result: ${syncResult.message}`);
+              } else {
+                logger.warn(`HEAD branch sync result: ${syncResult.message}`);
+              }
+            }
+          }
+        } catch {
+          // Could not determine HEAD branch — skip sync
+        }
+      }
+
       // Check if branch exists (using array arguments to prevent injection)
       let branchExists = false;
       try {
@@ -226,6 +277,19 @@ export function createCreateHandler(events: EventEmitter, settingsService?: Sett
       // normalizePath converts to forward slashes for API consistency
       const absoluteWorktreePath = path.resolve(worktreePath);
 
+      // Get the commit hash the new worktree is based on for logging
+      let baseCommitHash: string | undefined;
+      try {
+        const hash = await execGitCommand(['rev-parse', '--short', 'HEAD'], absoluteWorktreePath);
+        baseCommitHash = hash.trim();
+      } catch {
+        // Non-critical — just for logging
+      }
+
+      if (baseCommitHash) {
+        logger.info(`New worktree for '${branchName}' based on commit ${baseCommitHash}`);
+      }
+
       // Copy configured files into the new worktree before responding
       // This runs synchronously to ensure files are in place before any init script
       try {
@@ -247,6 +311,17 @@ export function createCreateHandler(events: EventEmitter, settingsService?: Sett
           path: normalizePath(absoluteWorktreePath),
           branch: branchName,
           isNew: !branchExists,
+          baseCommitHash,
+          ...(syncResult.attempted
+            ? {
+                syncResult: {
+                  synced: syncResult.synced,
+                  remote: syncResult.remote,
+                  message: syncResult.message,
+                  diverged: syncResult.diverged,
+                },
+              }
+            : {}),
         },
       });
 

@@ -49,6 +49,8 @@ const SETTINGS_FIELDS_TO_SYNC = [
   'fontFamilyMono',
   'terminalFontFamily', // Maps to terminalState.fontFamily
   'openTerminalMode', // Maps to terminalState.openTerminalMode
+  'terminalCustomBackgroundColor', // Maps to terminalState.customBackgroundColor
+  'terminalCustomForegroundColor', // Maps to terminalState.customForegroundColor
   'sidebarOpen',
   'sidebarStyle',
   'collapsedNavSections',
@@ -90,8 +92,14 @@ const SETTINGS_FIELDS_TO_SYNC = [
   'editorAutoSave',
   'editorAutoSaveDelay',
   'defaultTerminalId',
+  'enableAiCommitMessages',
+  'enableSkills',
+  'skillsSources',
+  'enableSubagents',
+  'subagentsSources',
   'promptCustomization',
   'eventHooks',
+  'claudeCompatibleProviders',
   'claudeApiProfiles',
   'activeClaudeApiProfileId',
   'projects',
@@ -109,6 +117,8 @@ const SETTINGS_FIELDS_TO_SYNC = [
   'codexEnableImages',
   'codexAdditionalDirs',
   'codexThreadId',
+  // Max Turns Setting
+  'defaultMaxTurns',
   // UI State (previously in localStorage)
   'worktreePanelCollapsed',
   'lastProjectDir',
@@ -142,6 +152,12 @@ function getSettingsFieldValue(
   }
   if (field === 'openTerminalMode') {
     return appState.terminalState.openTerminalMode;
+  }
+  if (field === 'terminalCustomBackgroundColor') {
+    return appState.terminalState.customBackgroundColor;
+  }
+  if (field === 'terminalCustomForegroundColor') {
+    return appState.terminalState.customForegroundColor;
   }
   if (field === 'autoModeByWorktree') {
     // Only persist settings (maxConcurrency), not runtime state (isRunning, runningTasks)
@@ -185,6 +201,16 @@ function hasSettingsFieldChanged(
   }
   if (field === 'openTerminalMode') {
     return newState.terminalState.openTerminalMode !== prevState.terminalState.openTerminalMode;
+  }
+  if (field === 'terminalCustomBackgroundColor') {
+    return (
+      newState.terminalState.customBackgroundColor !== prevState.terminalState.customBackgroundColor
+    );
+  }
+  if (field === 'terminalCustomForegroundColor') {
+    return (
+      newState.terminalState.customForegroundColor !== prevState.terminalState.customForegroundColor
+    );
   }
   const key = field as keyof typeof newState;
   return newState[key] !== prevState[key];
@@ -731,6 +757,7 @@ export async function refreshSettingsFromServer(): Promise<boolean> {
         ? migratePhaseModelEntry(serverSettings.defaultFeatureModel)
         : { model: 'claude-opus' },
       muteDoneSound: serverSettings.muteDoneSound,
+      defaultMaxTurns: serverSettings.defaultMaxTurns ?? 1000,
       disableSplashScreen: serverSettings.disableSplashScreen ?? false,
       serverLogLevel: serverSettings.serverLogLevel ?? 'info',
       enableRequestLogging: serverSettings.enableRequestLogging ?? true,
@@ -747,7 +774,7 @@ export async function refreshSettingsFromServer(): Promise<boolean> {
       copilotDefaultModel: sanitizedCopilotDefaultModel,
       enabledDynamicModelIds: sanitizedDynamicModelIds,
       disabledProviders: serverSettings.disabledProviders ?? [],
-      autoLoadClaudeMd: serverSettings.autoLoadClaudeMd ?? false,
+      autoLoadClaudeMd: serverSettings.autoLoadClaudeMd ?? true,
       keyboardShortcuts: {
         ...currentAppState.keyboardShortcuts,
         ...(serverSettings.keyboardShortcuts as unknown as Partial<
@@ -786,7 +813,12 @@ export async function refreshSettingsFromServer(): Promise<boolean> {
       codexAdditionalDirs: serverSettings.codexAdditionalDirs ?? [],
       codexThreadId: serverSettings.codexThreadId,
       // Terminal settings (nested in terminalState)
-      ...((serverSettings.terminalFontFamily || serverSettings.openTerminalMode) && {
+      ...((serverSettings.terminalFontFamily ||
+        serverSettings.openTerminalMode ||
+        (serverSettings as unknown as Record<string, unknown>).terminalCustomBackgroundColor !==
+          undefined ||
+        (serverSettings as unknown as Record<string, unknown>).terminalCustomForegroundColor !==
+          undefined) && {
         terminalState: {
           ...currentAppState.terminalState,
           ...(serverSettings.terminalFontFamily && {
@@ -794,6 +826,16 @@ export async function refreshSettingsFromServer(): Promise<boolean> {
           }),
           ...(serverSettings.openTerminalMode && {
             openTerminalMode: serverSettings.openTerminalMode,
+          }),
+          ...((serverSettings as unknown as Record<string, unknown>)
+            .terminalCustomBackgroundColor !== undefined && {
+            customBackgroundColor: (serverSettings as unknown as Record<string, unknown>)
+              .terminalCustomBackgroundColor as string | null,
+          }),
+          ...((serverSettings as unknown as Record<string, unknown>)
+            .terminalCustomForegroundColor !== undefined && {
+            customForegroundColor: (serverSettings as unknown as Record<string, unknown>)
+              .terminalCustomForegroundColor as string | null,
           }),
         },
       }),

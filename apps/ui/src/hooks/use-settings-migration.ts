@@ -213,6 +213,12 @@ export function parseLocalStorageSettings(): Partial<GlobalSettings> | null {
       // Claude Compatible Providers (new system)
       claudeCompatibleProviders:
         (state.claudeCompatibleProviders as GlobalSettings['claudeCompatibleProviders']) ?? [],
+      // Settings that were previously missing from migration (added for sync parity)
+      enableAiCommitMessages: state.enableAiCommitMessages as boolean | undefined,
+      enableSkills: state.enableSkills as boolean | undefined,
+      skillsSources: state.skillsSources as GlobalSettings['skillsSources'] | undefined,
+      enableSubagents: state.enableSubagents as boolean | undefined,
+      subagentsSources: state.subagentsSources as GlobalSettings['subagentsSources'] | undefined,
     };
   } catch (error) {
     logger.error('Failed to parse localStorage settings:', error);
@@ -355,6 +361,27 @@ export function mergeSettings(
     localSettings.claudeCompatibleProviders.length > 0
   ) {
     merged.claudeCompatibleProviders = localSettings.claudeCompatibleProviders;
+  }
+
+  // Preserve new settings fields from localStorage if server has defaults
+  // Use nullish coalescing to accept stored falsy values (e.g. false)
+  if (localSettings.enableAiCommitMessages != null && merged.enableAiCommitMessages == null) {
+    merged.enableAiCommitMessages = localSettings.enableAiCommitMessages;
+  }
+  if (localSettings.enableSkills != null && merged.enableSkills == null) {
+    merged.enableSkills = localSettings.enableSkills;
+  }
+  if (localSettings.skillsSources && (!merged.skillsSources || merged.skillsSources.length === 0)) {
+    merged.skillsSources = localSettings.skillsSources;
+  }
+  if (localSettings.enableSubagents != null && merged.enableSubagents == null) {
+    merged.enableSubagents = localSettings.enableSubagents;
+  }
+  if (
+    localSettings.subagentsSources &&
+    (!merged.subagentsSources || merged.subagentsSources.length === 0)
+  ) {
+    merged.subagentsSources = localSettings.subagentsSources;
   }
 
   return merged;
@@ -728,7 +755,12 @@ export function hydrateStoreFromSettings(settings: GlobalSettings): void {
     opencodeDefaultModel: sanitizedOpencodeDefaultModel,
     enabledDynamicModelIds: sanitizedDynamicModelIds,
     disabledProviders: settings.disabledProviders ?? [],
-    autoLoadClaudeMd: settings.autoLoadClaudeMd ?? false,
+    enableAiCommitMessages: settings.enableAiCommitMessages ?? true,
+    enableSkills: settings.enableSkills ?? true,
+    skillsSources: settings.skillsSources ?? ['user', 'project'],
+    enableSubagents: settings.enableSubagents ?? true,
+    subagentsSources: settings.subagentsSources ?? ['user', 'project'],
+    autoLoadClaudeMd: settings.autoLoadClaudeMd ?? true,
     skipSandboxWarning: settings.skipSandboxWarning ?? false,
     codexAutoLoadAgents: settings.codexAutoLoadAgents ?? false,
     codexSandboxMode: settings.codexSandboxMode ?? 'workspace-write',
@@ -763,11 +795,25 @@ export function hydrateStoreFromSettings(settings: GlobalSettings): void {
     editorFontFamily: settings.editorFontFamily ?? 'default',
     editorAutoSave: settings.editorAutoSave ?? false,
     editorAutoSaveDelay: settings.editorAutoSaveDelay ?? 1000,
-    // Terminal font (nested in terminalState)
-    ...(settings.terminalFontFamily && {
+    // Terminal settings (nested in terminalState)
+    ...((settings.terminalFontFamily ||
+      (settings as unknown as Record<string, unknown>).terminalCustomBackgroundColor !==
+        undefined ||
+      (settings as unknown as Record<string, unknown>).terminalCustomForegroundColor !==
+        undefined) && {
       terminalState: {
         ...current.terminalState,
-        fontFamily: settings.terminalFontFamily,
+        ...(settings.terminalFontFamily && { fontFamily: settings.terminalFontFamily }),
+        ...((settings as unknown as Record<string, unknown>).terminalCustomBackgroundColor !==
+          undefined && {
+          customBackgroundColor: (settings as unknown as Record<string, unknown>)
+            .terminalCustomBackgroundColor as string | null,
+        }),
+        ...((settings as unknown as Record<string, unknown>).terminalCustomForegroundColor !==
+          undefined && {
+          customForegroundColor: (settings as unknown as Record<string, unknown>)
+            .terminalCustomForegroundColor as string | null,
+        }),
       },
     }),
   });
@@ -827,6 +873,11 @@ function buildSettingsUpdateFromStore(): Record<string, unknown> {
     defaultReasoningEffort: state.defaultReasoningEffort,
     enabledDynamicModelIds: state.enabledDynamicModelIds,
     disabledProviders: state.disabledProviders,
+    enableAiCommitMessages: state.enableAiCommitMessages,
+    enableSkills: state.enableSkills,
+    skillsSources: state.skillsSources,
+    enableSubagents: state.enableSubagents,
+    subagentsSources: state.subagentsSources,
     autoLoadClaudeMd: state.autoLoadClaudeMd,
     skipSandboxWarning: state.skipSandboxWarning,
     codexAutoLoadAgents: state.codexAutoLoadAgents,
@@ -858,6 +909,8 @@ function buildSettingsUpdateFromStore(): Record<string, unknown> {
     editorAutoSave: state.editorAutoSave,
     editorAutoSaveDelay: state.editorAutoSaveDelay,
     terminalFontFamily: state.terminalState.fontFamily,
+    terminalCustomBackgroundColor: state.terminalState.customBackgroundColor,
+    terminalCustomForegroundColor: state.terminalState.customForegroundColor,
   };
 }
 

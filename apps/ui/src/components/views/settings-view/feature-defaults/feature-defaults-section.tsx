@@ -1,5 +1,7 @@
+import { useState, useEffect } from 'react';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
 import {
   FlaskConical,
   TestTube,
@@ -12,6 +14,7 @@ import {
   FastForward,
   Sparkles,
   Cpu,
+  RotateCcw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -34,6 +37,7 @@ interface FeatureDefaultsSectionProps {
   defaultRequirePlanApproval: boolean;
   enableAiCommitMessages: boolean;
   defaultFeatureModel: PhaseModelEntry;
+  defaultMaxTurns: number;
   onDefaultSkipTestsChange: (value: boolean) => void;
   onEnableDependencyBlockingChange: (value: boolean) => void;
   onSkipVerificationInAutoModeChange: (value: boolean) => void;
@@ -41,6 +45,7 @@ interface FeatureDefaultsSectionProps {
   onDefaultRequirePlanApprovalChange: (value: boolean) => void;
   onEnableAiCommitMessagesChange: (value: boolean) => void;
   onDefaultFeatureModelChange: (value: PhaseModelEntry) => void;
+  onDefaultMaxTurnsChange: (value: number) => void;
 }
 
 export function FeatureDefaultsSection({
@@ -51,6 +56,7 @@ export function FeatureDefaultsSection({
   defaultRequirePlanApproval,
   enableAiCommitMessages,
   defaultFeatureModel,
+  defaultMaxTurns,
   onDefaultSkipTestsChange,
   onEnableDependencyBlockingChange,
   onSkipVerificationInAutoModeChange,
@@ -58,7 +64,16 @@ export function FeatureDefaultsSection({
   onDefaultRequirePlanApprovalChange,
   onEnableAiCommitMessagesChange,
   onDefaultFeatureModelChange,
+  onDefaultMaxTurnsChange,
 }: FeatureDefaultsSectionProps) {
+  const [maxTurnsInput, setMaxTurnsInput] = useState(String(defaultMaxTurns));
+
+  // Keep the displayed input in sync if the prop changes after mount
+  // (e.g. when settings are loaded asynchronously or reset from parent)
+  useEffect(() => {
+    setMaxTurnsInput(String(defaultMaxTurns));
+  }, [defaultMaxTurns]);
+
   return (
     <div
       className={cn(
@@ -97,6 +112,55 @@ export function FeatureDefaultsSection({
             </div>
             <p className="text-xs text-muted-foreground/80 leading-relaxed">
               The default AI model and thinking level used when creating new feature cards.
+            </p>
+          </div>
+        </div>
+
+        {/* Separator */}
+        <div className="border-t border-border/30" />
+
+        {/* Max Turns Setting */}
+        <div className="group flex items-start space-x-3 p-3 rounded-xl hover:bg-accent/30 transition-colors duration-200 -mx-3">
+          <div className="w-10 h-10 mt-0.5 rounded-xl flex items-center justify-center shrink-0 bg-orange-500/10">
+            <RotateCcw className="w-5 h-5 text-orange-500" />
+          </div>
+          <div className="flex-1 space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="default-max-turns" className="text-foreground font-medium">
+                Max Agent Turns
+              </Label>
+              <Input
+                id="default-max-turns"
+                type="number"
+                min={1}
+                max={2000}
+                step={1}
+                value={maxTurnsInput}
+                onChange={(e) => {
+                  setMaxTurnsInput(e.target.value);
+                }}
+                onBlur={() => {
+                  const value = Number(maxTurnsInput);
+                  if (Number.isInteger(value) && value >= 1 && value <= 2000) {
+                    onDefaultMaxTurnsChange(value);
+                  } else {
+                    // Reset to current valid value if invalid (including decimals like "1.5")
+                    setMaxTurnsInput(String(defaultMaxTurns));
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    (e.target as HTMLInputElement).blur();
+                  }
+                }}
+                className="w-[100px] h-8 text-right"
+                data-testid="default-max-turns-input"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground/80 leading-relaxed">
+              Maximum number of tool-call round-trips the AI agent can perform per feature. Higher
+              values allow more complex tasks but use more API credits. Default: 1000, Range:
+              1-2000. Supported by Claude and Codex providers.
             </p>
           </div>
         </div>

@@ -369,6 +369,7 @@ const initialState: AppState = {
   defaultFeatureModel: DEFAULT_GLOBAL_SETTINGS.defaultFeatureModel,
   defaultThinkingLevel: DEFAULT_GLOBAL_SETTINGS.defaultThinkingLevel ?? 'none',
   defaultReasoningEffort: DEFAULT_GLOBAL_SETTINGS.defaultReasoningEffort ?? 'none',
+  defaultMaxTurns: DEFAULT_GLOBAL_SETTINGS.defaultMaxTurns ?? 1000,
   pendingPlanApproval: null,
   claudeRefreshInterval: 60,
   claudeUsage: null,
@@ -991,7 +992,7 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     const key = get().getWorktreeKey(projectId, branchName);
     set((state) => {
       const current = state.autoModeByWorktree[key] || {
-        isRunning: true,
+        isRunning: false,
         runningTasks: [],
         branchName,
       };
@@ -1109,7 +1110,7 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     // Sync to server
     try {
       const httpApi = getHttpApiClient();
-      await httpApi.put('/api/settings', { skipVerificationInAutoMode: enabled });
+      await httpApi.settings.updateGlobal({ skipVerificationInAutoMode: enabled });
     } catch (error) {
       logger.error('Failed to sync skipVerificationInAutoMode:', error);
     }
@@ -1119,7 +1120,7 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     // Sync to server
     try {
       const httpApi = getHttpApiClient();
-      await httpApi.put('/api/settings', { enableAiCommitMessages: enabled });
+      await httpApi.settings.updateGlobal({ enableAiCommitMessages: enabled });
     } catch (error) {
       logger.error('Failed to sync enableAiCommitMessages:', error);
     }
@@ -1129,7 +1130,7 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     // Sync to server
     try {
       const httpApi = getHttpApiClient();
-      await httpApi.put('/api/settings', { mergePostAction: action });
+      await httpApi.settings.updateGlobal({ mergePostAction: action });
     } catch (error) {
       logger.error('Failed to sync mergePostAction:', error);
     }
@@ -1139,7 +1140,7 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     // Sync to server
     try {
       const httpApi = getHttpApiClient();
-      await httpApi.put('/api/settings', { planUseSelectedWorktreeBranch: enabled });
+      await httpApi.settings.updateGlobal({ planUseSelectedWorktreeBranch: enabled });
     } catch (error) {
       logger.error('Failed to sync planUseSelectedWorktreeBranch:', error);
     }
@@ -1149,7 +1150,7 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     // Sync to server
     try {
       const httpApi = getHttpApiClient();
-      await httpApi.put('/api/settings', { addFeatureUseSelectedWorktreeBranch: enabled });
+      await httpApi.settings.updateGlobal({ addFeatureUseSelectedWorktreeBranch: enabled });
     } catch (error) {
       logger.error('Failed to sync addFeatureUseSelectedWorktreeBranch:', error);
     }
@@ -1222,7 +1223,7 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     // Sync to server
     try {
       const httpApi = getHttpApiClient();
-      await httpApi.put('/api/settings', { phaseModels: get().phaseModels });
+      await httpApi.settings.updateGlobal({ phaseModels: get().phaseModels });
     } catch (error) {
       logger.error('Failed to sync phase model:', error);
     }
@@ -1234,7 +1235,7 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     // Sync to server
     try {
       const httpApi = getHttpApiClient();
-      await httpApi.put('/api/settings', { phaseModels: get().phaseModels });
+      await httpApi.settings.updateGlobal({ phaseModels: get().phaseModels });
     } catch (error) {
       logger.error('Failed to sync phase models:', error);
     }
@@ -1244,7 +1245,7 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     // Sync to server
     try {
       const httpApi = getHttpApiClient();
-      await httpApi.put('/api/settings', { phaseModels: DEFAULT_PHASE_MODELS });
+      await httpApi.settings.updateGlobal({ phaseModels: DEFAULT_PHASE_MODELS });
     } catch (error) {
       logger.error('Failed to sync phase models reset:', error);
     }
@@ -1279,7 +1280,7 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     set({ codexAutoLoadAgents: enabled });
     try {
       const httpApi = getHttpApiClient();
-      await httpApi.put('/api/settings', { codexAutoLoadAgents: enabled });
+      await httpApi.settings.updateGlobal({ codexAutoLoadAgents: enabled });
     } catch (error) {
       logger.error('Failed to sync codexAutoLoadAgents:', error);
     }
@@ -1288,7 +1289,7 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     set({ codexSandboxMode: mode });
     try {
       const httpApi = getHttpApiClient();
-      await httpApi.put('/api/settings', { codexSandboxMode: mode });
+      await httpApi.settings.updateGlobal({ codexSandboxMode: mode });
     } catch (error) {
       logger.error('Failed to sync codexSandboxMode:', error);
     }
@@ -1297,7 +1298,7 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     set({ codexApprovalPolicy: policy });
     try {
       const httpApi = getHttpApiClient();
-      await httpApi.put('/api/settings', { codexApprovalPolicy: policy });
+      await httpApi.settings.updateGlobal({ codexApprovalPolicy: policy });
     } catch (error) {
       logger.error('Failed to sync codexApprovalPolicy:', error);
     }
@@ -1306,7 +1307,7 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     set({ codexEnableWebSearch: enabled });
     try {
       const httpApi = getHttpApiClient();
-      await httpApi.put('/api/settings', { codexEnableWebSearch: enabled });
+      await httpApi.settings.updateGlobal({ codexEnableWebSearch: enabled });
     } catch (error) {
       logger.error('Failed to sync codexEnableWebSearch:', error);
     }
@@ -1315,7 +1316,7 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     set({ codexEnableImages: enabled });
     try {
       const httpApi = getHttpApiClient();
-      await httpApi.put('/api/settings', { codexEnableImages: enabled });
+      await httpApi.settings.updateGlobal({ codexEnableImages: enabled });
     } catch (error) {
       logger.error('Failed to sync codexEnableImages:', error);
     }
@@ -1375,7 +1376,7 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     set({ autoLoadClaudeMd: enabled });
     try {
       const httpApi = getHttpApiClient();
-      await httpApi.put('/api/settings', { autoLoadClaudeMd: enabled });
+      await httpApi.settings.updateGlobal({ autoLoadClaudeMd: enabled });
     } catch (error) {
       logger.error('Failed to sync autoLoadClaudeMd:', error);
     }
@@ -1384,7 +1385,7 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     set({ skipSandboxWarning: skip });
     try {
       const httpApi = getHttpApiClient();
-      await httpApi.put('/api/settings', { skipSandboxWarning: skip });
+      await httpApi.settings.updateGlobal({ skipSandboxWarning: skip });
     } catch (error) {
       logger.error('Failed to sync skipSandboxWarning:', error);
     }
@@ -1407,7 +1408,7 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     set({ promptCustomization: customization });
     try {
       const httpApi = getHttpApiClient();
-      await httpApi.put('/api/settings', { promptCustomization: customization });
+      await httpApi.settings.updateGlobal({ promptCustomization: customization });
     } catch (error) {
       logger.error('Failed to sync prompt customization:', error);
     }
@@ -1423,7 +1424,7 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     }));
     try {
       const httpApi = getHttpApiClient();
-      await httpApi.put('/api/settings', {
+      await httpApi.settings.updateGlobal({
         claudeCompatibleProviders: get().claudeCompatibleProviders,
       });
     } catch (error) {
@@ -1438,7 +1439,7 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     }));
     try {
       const httpApi = getHttpApiClient();
-      await httpApi.put('/api/settings', {
+      await httpApi.settings.updateGlobal({
         claudeCompatibleProviders: get().claudeCompatibleProviders,
       });
     } catch (error) {
@@ -1451,7 +1452,7 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     }));
     try {
       const httpApi = getHttpApiClient();
-      await httpApi.put('/api/settings', {
+      await httpApi.settings.updateGlobal({
         claudeCompatibleProviders: get().claudeCompatibleProviders,
       });
     } catch (error) {
@@ -1462,7 +1463,7 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     set({ claudeCompatibleProviders: providers });
     try {
       const httpApi = getHttpApiClient();
-      await httpApi.put('/api/settings', { claudeCompatibleProviders: providers });
+      await httpApi.settings.updateGlobal({ claudeCompatibleProviders: providers });
     } catch (error) {
       logger.error('Failed to sync Claude-compatible providers:', error);
     }
@@ -1475,7 +1476,7 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     }));
     try {
       const httpApi = getHttpApiClient();
-      await httpApi.put('/api/settings', {
+      await httpApi.settings.updateGlobal({
         claudeCompatibleProviders: get().claudeCompatibleProviders,
       });
     } catch (error) {
@@ -1490,7 +1491,7 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     }));
     try {
       const httpApi = getHttpApiClient();
-      await httpApi.put('/api/settings', { claudeApiProfiles: get().claudeApiProfiles });
+      await httpApi.settings.updateGlobal({ claudeApiProfiles: get().claudeApiProfiles });
     } catch (error) {
       logger.error('Failed to sync Claude API profiles:', error);
     }
@@ -1503,7 +1504,7 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     }));
     try {
       const httpApi = getHttpApiClient();
-      await httpApi.put('/api/settings', { claudeApiProfiles: get().claudeApiProfiles });
+      await httpApi.settings.updateGlobal({ claudeApiProfiles: get().claudeApiProfiles });
     } catch (error) {
       logger.error('Failed to sync Claude API profiles:', error);
     }
@@ -1516,7 +1517,7 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     }));
     try {
       const httpApi = getHttpApiClient();
-      await httpApi.put('/api/settings', {
+      await httpApi.settings.updateGlobal({
         claudeApiProfiles: get().claudeApiProfiles,
         activeClaudeApiProfileId: get().activeClaudeApiProfileId,
       });
@@ -1528,7 +1529,7 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     set({ activeClaudeApiProfileId: id });
     try {
       const httpApi = getHttpApiClient();
-      await httpApi.put('/api/settings', { activeClaudeApiProfileId: id });
+      await httpApi.settings.updateGlobal({ activeClaudeApiProfileId: id });
     } catch (error) {
       logger.error('Failed to sync active Claude API profile:', error);
     }
@@ -1537,7 +1538,7 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     set({ claudeApiProfiles: profiles });
     try {
       const httpApi = getHttpApiClient();
-      await httpApi.put('/api/settings', { claudeApiProfiles: profiles });
+      await httpApi.settings.updateGlobal({ claudeApiProfiles: profiles });
     } catch (error) {
       logger.error('Failed to sync Claude API profiles:', error);
     }
@@ -1947,6 +1948,16 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
       terminalState: { ...state.terminalState, openTerminalMode: mode },
     })),
 
+  setTerminalBackgroundColor: (color) =>
+    set((state) => ({
+      terminalState: { ...state.terminalState, customBackgroundColor: color },
+    })),
+
+  setTerminalForegroundColor: (color) =>
+    set((state) => ({
+      terminalState: { ...state.terminalState, customForegroundColor: color },
+    })),
+
   addTerminalTab: (name) => {
     const newTabId = `tab-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const tabNumber = get().terminalState.tabs.length + 1;
@@ -2341,7 +2352,7 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     // Sync to server
     try {
       const httpApi = getHttpApiClient();
-      await httpApi.put('/api/settings', { defaultThinkingLevel: level });
+      await httpApi.settings.updateGlobal({ defaultThinkingLevel: level });
     } catch (error) {
       logger.error('Failed to sync defaultThinkingLevel:', error);
     }
@@ -2352,9 +2363,24 @@ export const useAppStore = create<AppState & AppActions>()((set, get) => ({
     // Sync to server
     try {
       const httpApi = getHttpApiClient();
-      await httpApi.put('/api/settings', { defaultReasoningEffort: effort });
+      await httpApi.settings.updateGlobal({ defaultReasoningEffort: effort });
     } catch (error) {
       logger.error('Failed to sync defaultReasoningEffort:', error);
+    }
+  },
+
+  setDefaultMaxTurns: async (maxTurns: number) => {
+    // Guard against NaN/Infinity before flooring and clamping
+    const safeValue = Number.isFinite(maxTurns) ? maxTurns : 1;
+    // Clamp to valid range
+    const clamped = Math.max(1, Math.min(2000, Math.floor(safeValue)));
+    set({ defaultMaxTurns: clamped });
+    // Sync to server
+    try {
+      const httpApi = getHttpApiClient();
+      await httpApi.settings.updateGlobal({ defaultMaxTurns: clamped });
+    } catch (error) {
+      logger.error('Failed to sync defaultMaxTurns:', error);
     }
   },
 

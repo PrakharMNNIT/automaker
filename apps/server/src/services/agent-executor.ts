@@ -38,6 +38,8 @@ export type {
 
 const logger = createLogger('AgentExecutor');
 
+const DEFAULT_MAX_TURNS = 1000;
+
 export class AgentExecutor {
   private static readonly WRITE_DEBOUNCE_MS = 500;
   private static readonly STREAM_HEARTBEAT_MS = 15_000;
@@ -99,10 +101,22 @@ export class AgentExecutor {
       workDir,
       false
     );
+    const resolvedMaxTurns = sdkOptions?.maxTurns ?? DEFAULT_MAX_TURNS;
+    if (sdkOptions?.maxTurns == null) {
+      logger.info(
+        `[execute] Feature ${featureId}: sdkOptions.maxTurns is not set, defaulting to ${resolvedMaxTurns}. ` +
+          `Model: ${effectiveBareModel}`
+      );
+    } else {
+      logger.info(
+        `[execute] Feature ${featureId}: maxTurns=${resolvedMaxTurns}, model=${effectiveBareModel}`
+      );
+    }
+
     const executeOptions: ExecuteOptions = {
       prompt: promptContent,
       model: effectiveBareModel,
-      maxTurns: sdkOptions?.maxTurns,
+      maxTurns: resolvedMaxTurns,
       cwd: workDir,
       allowedTools: sdkOptions?.allowedTools as string[] | undefined,
       abortController,
@@ -279,6 +293,17 @@ export class AgentExecutor {
           throw new Error(AgentExecutor.sanitizeProviderError(msg.error));
         } else if (msg.type === 'result' && msg.subtype === 'success') scheduleWrite();
       }
+    } finally {
+      clearInterval(streamHeartbeat);
+      if (writeTimeout) clearTimeout(writeTimeout);
+      if (rawWriteTimeout) clearTimeout(rawWriteTimeout);
+
+      const streamElapsedMs = Date.now() - streamStartTime;
+      logger.info(
+        `[execute] Stream ended for feature ${featureId} after ${Math.round(streamElapsedMs / 1000)}s. ` +
+          `aborted=${aborted}, specDetected=${specDetected}, responseLength=${responseText.length}`
+      );
+
       await writeToFile();
       if (enableRawOutput && rawOutputLines.length > 0) {
         try {
@@ -288,10 +313,6 @@ export class AgentExecutor {
           /* ignore */
         }
       }
-    } finally {
-      clearInterval(streamHeartbeat);
-      if (writeTimeout) clearTimeout(writeTimeout);
-      if (rawWriteTimeout) clearTimeout(rawWriteTimeout);
     }
     return { responseText, specDetected, tasksCompleted, aborted };
   }
@@ -351,8 +372,13 @@ export class AgentExecutor {
         taskPrompts.taskExecution.taskPromptTemplate,
         userFeedback
       );
+      const taskMaxTurns = sdkOptions?.maxTurns ?? DEFAULT_MAX_TURNS;
+      logger.info(
+        `[executeTasksLoop] Feature ${featureId}, task ${task.id} (${taskIndex + 1}/${tasks.length}): ` +
+          `maxTurns=${taskMaxTurns} (sdkOptions.maxTurns=${sdkOptions?.maxTurns ?? 'undefined'})`
+      );
       const taskStream = provider.executeQuery(
-        this.buildExecOpts(options, taskPrompt, Math.min(sdkOptions?.maxTurns ?? 100, 100))
+        this.buildExecOpts(options, taskPrompt, taskMaxTurns)
       );
       let taskOutput = '',
         taskStartDetected = false,
@@ -571,7 +597,7 @@ export class AgentExecutor {
           });
           let revText = '';
           for await (const msg of provider.executeQuery(
-            this.buildExecOpts(options, revPrompt, sdkOptions?.maxTurns ?? 100)
+            this.buildExecOpts(options, revPrompt, sdkOptions?.maxTurns ?? DEFAULT_MAX_TURNS)
           )) {
             if (msg.type === 'assistant' && msg.message?.content)
               for (const b of msg.message.content)
@@ -657,7 +683,7 @@ export class AgentExecutor {
     return { responseText, tasksCompleted };
   }
 
-  private buildExecOpts(o: AgentExecutionOptions, prompt: string, maxTurns?: number) {
+  private buildExecOpts(o: AgentExecutionOptions, prompt: string, maxTurns: number) {
     return {
       prompt,
       model: o.effectiveBareModel,
@@ -689,7 +715,7 @@ export class AgentExecutor {
       .replace(/\{\{approvedPlan\}\}/g, planContent);
     let responseText = initialResponseText;
     for await (const msg of provider.executeQuery(
-      this.buildExecOpts(options, contPrompt, options.sdkOptions?.maxTurns)
+      this.buildExecOpts(options, contPrompt, options.sdkOptions?.maxTurns ?? DEFAULT_MAX_TURNS)
     )) {
       if (msg.type === 'assistant' && msg.message?.content)
         for (const b of msg.message.content) {

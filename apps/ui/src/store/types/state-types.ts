@@ -182,6 +182,9 @@ export interface AppState {
   defaultThinkingLevel: ThinkingLevel;
   defaultReasoningEffort: ReasoningEffort;
 
+  // Default max turns for agent execution (1-2000)
+  defaultMaxTurns: number;
+
   // Cursor CLI Settings (global)
   enabledCursorModels: CursorModelId[]; // Which Cursor models are available in feature modal
   cursorDefaultModel: CursorModelId; // Default Cursor model selection
@@ -564,6 +567,7 @@ export interface AppActions {
   toggleFavoriteModel: (modelId: string) => void;
   setDefaultThinkingLevel: (level: ThinkingLevel) => void;
   setDefaultReasoningEffort: (effort: ReasoningEffort) => void;
+  setDefaultMaxTurns: (maxTurns: number) => void;
 
   // Cursor CLI Settings actions
   setEnabledCursorModels: (models: CursorModelId[]) => void;
@@ -708,6 +712,8 @@ export interface AppActions {
   setTerminalMaxSessions: (maxSessions: number) => void;
   setTerminalLastActiveProjectPath: (projectPath: string | null) => void;
   setOpenTerminalMode: (mode: 'newTab' | 'split') => void;
+  setTerminalBackgroundColor: (color: string | null) => void;
+  setTerminalForegroundColor: (color: string | null) => void;
   addTerminalTab: (name?: string) => string;
   removeTerminalTab: (tabId: string) => void;
   setActiveTerminalTab: (tabId: string) => void;
